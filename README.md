@@ -13,7 +13,7 @@ A Flutter package for seamless video editing with powerful trimming capabilities
 
 ## Screenshots
 
-![Video Editor Demo](https://github.com/azulmouad/azul_video_editor/raw/main/screenshots/screenshot.gif)
+<img src="https://github.com/azulmouad/azul_video_editor/raw/main/screenshots/screenshot.gif" alt="Video Editor Demo" width="300" />
 
 
 ## Installation
