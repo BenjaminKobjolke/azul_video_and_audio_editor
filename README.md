@@ -11,6 +11,11 @@ A Flutter package for seamless video editing with powerful trimming capabilities
 - **Customizable UI**: Tailor colors, text, and aspect ratios to match your app.
 - **Easy Integration**: Simple API for quick setup in any Flutter project.
 
+## Screenshots
+
+![Video Editor Demo](https://github.com/azulmouad/azul_video_editor/raw/main/screenshots/screenshot.gif)
+
+
 ## Installation
 
 Add the package to your project by including it in your `pubspec.yaml`:
