@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:easy_video_editor/easy_video_editor.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:video_player/video_player.dart';
-import 'package:video_thumbnail/video_thumbnail.dart';
+import 'package:flutter_video_thumbnail_plus/flutter_video_thumbnail_plus.dart';
 import 'dart:io';
 import 'dart:async';
 import 'dart:typed_data';
@@ -322,9 +322,9 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
       for (int i = 0; i < thumbnailCount; i++) {
         final positionMs = (videoDurationMs / thumbnailCount) * i;
 
-        final thumbnail = await VideoThumbnail.thumbnailData(
+        final thumbnail = await FlutterVideoThumbnailPlus.thumbnailData(
           video: videoFile!.path,
-          imageFormat: ImageFormat.JPEG,
+          imageFormat: ImageFormat.jpeg,
           timeMs: positionMs.toInt(),
           quality: 10, // Low quality to save memory
           maxWidth: 100, // Reduce width to save memory
