@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:easy_video_editor/easy_video_editor.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:video_player/video_player.dart';
-import 'package:flutter_video_thumbnail_plus/flutter_video_thumbnail_plus.dart';
 import 'dart:io';
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:math' as math;
 import 'models/azul_editor_options.dart';
+import 'models/media_controller.dart';
+import 'controllers/video_media_controller.dart';
+import 'generators/visual_data_generator.dart';
+import 'generators/video_thumbnail_generator.dart';
+import 'widgets/media_timeline.dart';
+import 'widgets/media_player_widget.dart';
 
 /// Main class for the Azul Video Editor
 class AzulVideoEditor extends StatefulWidget {
@@ -57,11 +61,13 @@ class AzulVideoEditor extends StatefulWidget {
 }
 
 class _AzulVideoEditorState extends State<AzulVideoEditor> {
-  File? videoFile;
+  File? mediaFile;
+  MediaType? mediaType;
   bool isPlaying = false;
-  String _status = 'No video selected';
+  String _status = 'No media selected';
 
-  VideoPlayerController? videoPlayerController;
+  MediaController? mediaController;
+  VisualDataGenerator? visualGenerator;
   bool isInitialized = false;
 
   double startMs = 0;
@@ -86,54 +92,69 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
 
     // Use the initial video file if provided
     if (widget.initialVideoFile != null) {
-      videoFile = widget.initialVideoFile;
-      _initializeVideoPlayer();
+      mediaFile = widget.initialVideoFile;
+      _initializeMediaPlayer();
     } else if (widget.autoPickVideo) {
-      // Auto pick video on init if requested
+      // Auto pick media on init if requested
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _pickVideo();
+        _pickMedia();
       });
     }
   }
 
   @override
   void dispose() {
-    videoPlayerController?.dispose();
+    mediaController?.dispose();
     _timelineScrollController.dispose();
     _scrollEndTimer?.cancel();
     super.dispose();
   }
 
-  Future<void> _pickVideo() async {
+  Future<void> _pickMedia() async {
+    // Support both video and audio files
     FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.video,
+      type: FileType.custom,
+      allowedExtensions: [
+        // Video formats
+        'mp4', 'mov', 'avi', 'mkv', 'flv', 'wmv', 'webm', 'm4v', 'mpeg', 'mpg', '3gp',
+        // Audio formats
+        'mp3', 'wav', 'aac', 'flac', 'ogg', 'wma', 'm4a', 'opus', 'aiff', 'alac',
+      ],
       allowCompression: false,
     );
 
     if (result != null &&
         result.files.isNotEmpty &&
         result.files.single.path != null) {
+      final selectedFile = File(result.files.single.path!);
+      final detectedMediaType = MediaTypeDetector.detectFromFile(selectedFile);
+
       setState(() {
-        videoFile = File(result.files.single.path!);
-        _status = 'Video selected';
+        mediaFile = selectedFile;
+        mediaType = detectedMediaType;
+        _status = detectedMediaType == MediaType.video
+            ? 'Video selected'
+            : detectedMediaType == MediaType.audio
+                ? 'Audio selected'
+                : 'Media selected';
         isPlaying = false;
         thumbnailsData = null;
         isInitialized = false;
       });
 
       // Clean up previous controller
-      if (videoPlayerController != null) {
-        videoPlayerController!.removeListener(_updatePlaybackPosition);
-        videoPlayerController!.removeListener(_checkVideoEnd);
-        await videoPlayerController!.dispose();
-        videoPlayerController = null;
+      if (mediaController != null) {
+        mediaController!.removeListener(_updatePlaybackPosition);
+        mediaController!.removeListener(_checkMediaEnd);
+        await mediaController!.dispose();
+        mediaController = null;
       }
 
-      await _initializeVideoPlayer();
+      await _initializeMediaPlayer();
     } else {
-      // If no video was selected and we're in autoPickVideo mode,
+      // If no media was selected and we're in autoPickVideo mode,
       // we should pop back since there's nothing to edit
-      if (widget.autoPickVideo && videoFile == null) {
+      if (widget.autoPickVideo && mediaFile == null) {
         if (mounted) {
           Navigator.of(context).pop();
         }
@@ -141,22 +162,37 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
     }
   }
 
-  Future<void> _initializeVideoPlayer() async {
-    if (videoFile == null) return;
+  Future<void> _initializeMediaPlayer() async {
+    if (mediaFile == null || mediaType == null) return;
 
     try {
-      videoPlayerController = VideoPlayerController.file(videoFile!);
-      await videoPlayerController!.initialize();
+      // Create appropriate media controller based on media type
+      if (mediaType == MediaType.video) {
+        mediaController = VideoMediaController();
+        visualGenerator = VideoThumbnailGenerator();
+      } else if (mediaType == MediaType.audio) {
+        // Audio support coming soon
+        setState(() {
+          _status = 'Audio editing support coming soon!';
+        });
+        return;
+      } else {
+        setState(() {
+          _status = 'Unsupported media type';
+        });
+        return;
+      }
 
-      videoDurationMs =
-          videoPlayerController!.value.duration.inMilliseconds.toDouble();
+      await mediaController!.initialize(mediaFile!);
+
+      videoDurationMs = mediaController!.durationMs.toDouble();
       endMs = math.min(
         widget.options.maxDurationMs.toDouble(),
         videoDurationMs,
       );
 
-      videoPlayerController!.addListener(_updatePlaybackPosition);
-      videoPlayerController!.addListener(_checkVideoEnd);
+      mediaController!.addListener(_updatePlaybackPosition);
+      mediaController!.addListener(_checkMediaEnd);
 
       _timelineScrollController.addListener(_onTimelineScroll);
 
@@ -165,33 +201,32 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
         _currentPlaybackPositionMs = 0;
       });
 
-      await _generateInMemoryThumbnails();
+      await _generateVisualData();
     } catch (e) {
       setState(() {
-        _status = 'Error initializing video: $e';
+        _status = 'Error initializing media: $e';
       });
     }
   }
 
   void _updatePlaybackPosition() {
-    if (videoPlayerController != null &&
-        videoPlayerController!.value.isInitialized &&
+    if (mediaController != null &&
+        mediaController!.isInitialized &&
         mounted) {
       setState(() {
-        _currentPlaybackPositionMs =
-            videoPlayerController!.value.position.inMilliseconds.toDouble();
+        _currentPlaybackPositionMs = mediaController!.currentPositionMs.toDouble();
       });
     }
   }
 
-  void _checkVideoEnd() {
-    if (videoPlayerController != null &&
-        videoPlayerController!.value.isInitialized &&
-        videoPlayerController!.value.isPlaying &&
+  void _checkMediaEnd() {
+    if (mediaController != null &&
+        mediaController!.isInitialized &&
+        mediaController!.isPlaying &&
         _currentPlaybackPositionMs >= endMs) {
       setState(() {
         isPlaying = false;
-        videoPlayerController!.pause();
+        mediaController!.pause();
       });
       _seekToStartMarker();
     }
@@ -206,8 +241,8 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
   }
 
   void _onScrollEnd() {
-    if (videoPlayerController == null ||
-        !videoPlayerController!.value.isInitialized ||
+    if (mediaController == null ||
+        !mediaController!.isInitialized ||
         _viewportWidth <= 0 ||
         _thumbnailTotalWidth <= 0) {
       return;
@@ -229,15 +264,15 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
       startMs = math.max(0, seekPositionMs);
       endMs = math.min(startMs + segmentLength, videoDurationMs);
 
-      // Seek video to new start position
-      videoPlayerController?.seekTo(Duration(milliseconds: startMs.toInt()));
+      // Seek media to new start position
+      mediaController?.seekTo(startMs.toInt());
     });
   }
 
   void _seekToStartMarker() {
-    if (videoPlayerController != null &&
-        videoPlayerController!.value.isInitialized) {
-      videoPlayerController!.seekTo(Duration(milliseconds: startMs.toInt()));
+    if (mediaController != null &&
+        mediaController!.isInitialized) {
+      mediaController!.seekTo(startMs.toInt());
       setState(() {
         _currentPlaybackPositionMs = startMs;
       });
@@ -302,47 +337,34 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
     }
   }
 
-  Future<void> _generateInMemoryThumbnails() async {
-    if (videoFile == null) return;
+  Future<void> _generateVisualData() async {
+    if (mediaFile == null || visualGenerator == null) return;
 
     setState(() {
-      _status = 'Generating thumbnails...';
+      _status = mediaType == MediaType.video
+          ? 'Generating thumbnails...'
+          : 'Generating waveforms...';
       generatingThumbnails = true;
     });
 
     try {
-      // Optimize thumbnail count based on video duration
-      // Use fewer thumbnails for shorter videos to save memory
-      final int thumbnailCount = math.min(
-        80,
-        math.max(widget.options.thumbnailSize, (videoDurationMs / 500).round()),
+      final visualData = await visualGenerator!.generate(
+        file: mediaFile!,
+        durationMs: videoDurationMs,
+        thumbnailSize: widget.options.thumbnailSize,
+        onStatusUpdate: (status) {
+          if (mounted) {
+            setState(() {
+              _status = status;
+            });
+          }
+        },
       );
-      List<Uint8List> thumbnails = [];
-
-      for (int i = 0; i < thumbnailCount; i++) {
-        final positionMs = (videoDurationMs / thumbnailCount) * i;
-
-        final thumbnail = await FlutterVideoThumbnailPlus.thumbnailData(
-          video: videoFile!.path,
-          imageFormat: ImageFormat.jpeg,
-          timeMs: positionMs.toInt(),
-          quality: 10, // Low quality to save memory
-          maxWidth: 100, // Reduce width to save memory
-          maxHeight: 80,
-        );
-
-        if (thumbnail != null) {
-          thumbnails.add(thumbnail);
-        }
-
-        // Check if widget is still mounted before continuing
-        if (!mounted) return;
-      }
 
       if (mounted) {
         setState(() {
-          thumbnailsData = thumbnails;
-          _thumbnailTotalWidth = thumbnails.length * 30.0;
+          thumbnailsData = visualData;
+          _thumbnailTotalWidth = visualData.length * visualGenerator!.segmentWidth;
           generatingThumbnails = false;
           _status = 'Ready to edit';
         });
@@ -351,14 +373,30 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
       if (mounted) {
         setState(() {
           generatingThumbnails = false;
-          _status = 'Error generating thumbnails: $e';
+          _status = 'Error generating visual data: $e';
         });
       }
     }
   }
 
-  Future<void> _saveVideo() async {
-    if (videoFile == null) return;
+  Future<void> _saveMedia() async {
+    if (mediaFile == null) return;
+
+    // Currently only video export is supported
+    if (mediaType != MediaType.video) {
+      setState(() {
+        _status = 'Audio export not yet supported';
+      });
+      if (widget.options.showSavedSnackbar) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Audio export support coming soon!'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
 
     setState(() {
       _status = 'Processing video...';
@@ -366,7 +404,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
 
     try {
       final editor = VideoEditorBuilder(
-        videoPath: videoFile!.path,
+        videoPath: mediaFile!.path,
       ).trim(startTimeMs: startMs.toInt(), endTimeMs: endMs.toInt());
 
       final result = await editor.export();
@@ -400,13 +438,13 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
       if (!mounted) return;
 
       setState(() {
-        _status = 'Error saving video: $e';
+        _status = 'Error saving media: $e';
       });
 
       if (widget.options.showSavedSnackbar) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to save video segment: $e'),
+            content: Text('Failed to save media: $e'),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -415,8 +453,8 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
   }
 
   void _togglePlayPause() {
-    if (videoPlayerController == null ||
-        !videoPlayerController!.value.isInitialized) {
+    if (mediaController == null ||
+        !mediaController!.isInitialized) {
       return;
     }
 
@@ -427,9 +465,9 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
         if (_currentPlaybackPositionMs >= endMs) {
           _seekToStartMarker();
         }
-        videoPlayerController!.play();
+        mediaController!.play();
       } else {
-        videoPlayerController!.pause();
+        mediaController!.pause();
       }
     });
   }
@@ -462,33 +500,27 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
               ),
             ),
         actions: [
-          if (videoFile != null && isInitialized)
+          if (mediaFile != null && isInitialized)
             widget.options.saveButtonWidget ??
                 IconButton(
                   icon: const Icon(Icons.save, color: Colors.white),
-                  onPressed: _saveVideo,
+                  onPressed: _saveMedia,
                   tooltip: widget.options.saveButtonText,
                 ),
         ],
       ),
-      body: videoFile == null ? _buildEmptyState() : _buildVideoEditorContent(),
+      body: mediaFile == null ? _buildEmptyState() : _buildMediaEditorContent(),
       floatingActionButton:
-          videoFile == null && !widget.autoPickVideo
+          mediaFile == null && !widget.autoPickVideo
               ? FloatingActionButton.extended(
-                onPressed: _pickVideo,
+                onPressed: _pickMedia,
                 icon: const Icon(Icons.video_library, color: Colors.white),
                 label: const Text(
-                  'Select Video',
+                  'Select Media',
                   style: TextStyle(color: Colors.white),
                 ),
                 backgroundColor: widget.options.primaryColor,
               )
-              // : videoFile == null
-              // ? FloatingActionButton(
-              //   onPressed: _pickVideo,
-              //   backgroundColor: widget.options.primaryColor,
-              //   child: const Icon(Icons.change_circle, color: Colors.white),
-              // )
               : null,
     );
   }
@@ -505,7 +537,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
           ),
           const SizedBox(height: 20),
           const Text(
-            'No Video Selected',
+            'No Media Selected',
             style: TextStyle(
               color: Colors.white,
               fontSize: 22,
@@ -519,7 +551,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
                 style: TextStyle(color: Colors.white54, fontSize: 16),
               )
               : const Text(
-                'Tap "Select Video" to get started',
+                'Tap "Select Media" to get started',
                 style: TextStyle(color: Colors.white54, fontSize: 16),
               ),
         ],
@@ -527,10 +559,10 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
     );
   }
 
-  Widget _buildVideoEditorContent() {
+  Widget _buildMediaEditorContent() {
     return Column(
       children: [
-        // Video Player
+        // Media Player (Video or Audio)
         Expanded(
           flex: 3,
           child: Container(
@@ -539,35 +571,15 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
               borderRadius: BorderRadius.circular(widget.options.videoRadius),
             ),
             margin: EdgeInsets.all(widget.options.videoMargin),
-            child:
-                isInitialized
-                    ? Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        AspectRatio(
-                          aspectRatio:
-                              widget.options.aspectRatio ??
-                              videoPlayerController!.value.aspectRatio,
-                          child: VideoPlayer(videoPlayerController!),
-                        ),
-                        GestureDetector(
-                          onTap: _togglePlayPause,
-                          child: Container(
-                            decoration: const BoxDecoration(
-                              color: Colors.black45,
-                              shape: BoxShape.circle,
-                            ),
-                            padding: const EdgeInsets.all(16),
-                            child: Icon(
-                              isPlaying ? Icons.pause : Icons.play_arrow,
-                              color: Colors.white,
-                              size: 50,
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                    : const Center(child: CircularProgressIndicator()),
+            child: mediaController != null
+                ? MediaPlayerWidget(
+                    mediaController: mediaController!,
+                    isPlaying: isPlaying,
+                    onTogglePlayPause: _togglePlayPause,
+                    aspectRatio: widget.options.aspectRatio,
+                    backgroundColor: widget.options.videoBackgroundColor,
+                  )
+                : const Center(child: CircularProgressIndicator()),
           ),
         ),
 
@@ -596,170 +608,23 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
           const SizedBox(height: 5),
         ],
 
-        // Timeline with Thumbnails and Selection Markers
-        Container(
-          height: 100,
+        // Timeline with Thumbnails/Waveforms and Selection Markers
+        MediaTimeline(
+          visualData: thumbnailsData,
+          isGenerating: generatingThumbnails,
+          generatingText: widget.options.thumbnailGenerateText,
+          videoDurationMs: videoDurationMs,
+          startMs: startMs,
+          endMs: endMs,
+          currentPlaybackPositionMs: _currentPlaybackPositionMs,
+          scrollController: _timelineScrollController,
+          scrollPosition: _scrollPosition,
+          thumbnailTotalWidth: _thumbnailTotalWidth,
+          slideAreaColor: widget.options.slideAreaColor,
+          onSegmentDrag: _updateSegmentPosition,
+          onStartMarkerDrag: _handleStartMarkerDrag,
+          onEndMarkerDrag: _handleEndMarkerDrag,
           margin: widget.options.timelineMargin,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              _viewportWidth = constraints.maxWidth;
-
-              return NotificationListener<ScrollNotification>(
-                onNotification: (ScrollNotification scrollInfo) {
-                  if (scrollInfo is ScrollUpdateNotification) {
-                    // Recalculate positions when scrolling
-                    setState(() {
-                      _scrollPosition = _timelineScrollController.offset;
-                    });
-                  }
-                  return true;
-                },
-                child: Stack(
-                  clipBehavior: Clip.none, // Allow overflow
-                  children: [
-                    // Scrollable Thumbnails
-                    SingleChildScrollView(
-                      controller: _timelineScrollController,
-                      scrollDirection: Axis.horizontal,
-                      child:
-                          thumbnailsData != null
-                              ? SizedBox(
-                                width: _thumbnailTotalWidth,
-                                height: 80,
-                                child: Row(
-                                  children: List.generate(
-                                    thumbnailsData!.length,
-                                    (index) => Container(
-                                      width: 30,
-                                      height: 80,
-                                      decoration: BoxDecoration(
-                                        image: DecorationImage(
-                                          image: MemoryImage(
-                                            thumbnailsData![index],
-                                          ),
-                                          fit: BoxFit.cover,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              )
-                              : generatingThumbnails
-                              ? Center(
-                                child: Text(
-                                  widget.options.thumbnailGenerateText,
-                                  style: const TextStyle(color: Colors.white70),
-                                ),
-                              )
-                              : Container(),
-                    ),
-
-                    // Show loading indicator while generating thumbnails
-                    if (generatingThumbnails)
-                      const Center(
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ),
-
-                    // Only show the segment UI if thumbnails are ready
-                    if (thumbnailsData != null) ...[
-                      // Draggable Segment with Adjusted Positioning
-                      Positioned(
-                        left:
-                            ((startMs / videoDurationMs) *
-                                _thumbnailTotalWidth) -
-                            _scrollPosition,
-                        child: GestureDetector(
-                          onHorizontalDragUpdate: _updateSegmentPosition,
-                          child: Container(
-                            width:
-                                ((endMs - startMs) / videoDurationMs) *
-                                _thumbnailTotalWidth,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: widget.options.slideAreaColor,
-                                width: 2,
-                              ),
-                              color: Colors.yellow.withOpacity(0.3),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      // Start Marker [
-                      Positioned(
-                        left:
-                            ((startMs / videoDurationMs) *
-                                    _thumbnailTotalWidth -
-                                10) -
-                            _scrollPosition,
-                        child: GestureDetector(
-                          onHorizontalDragUpdate: _handleStartMarkerDrag,
-                          child: Container(
-                            width: 20,
-                            height: 80,
-                            color: Colors.grey.shade900,
-                            child: const Center(
-                              child: Text(
-                                '[',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      // End Marker ]
-                      Positioned(
-                        left:
-                            ((endMs / videoDurationMs) * _thumbnailTotalWidth) -
-                            _scrollPosition,
-                        child: GestureDetector(
-                          onHorizontalDragUpdate: _handleEndMarkerDrag,
-                          child: Container(
-                            width: 20,
-                            height: 80,
-                            color: Colors.grey.shade900,
-                            child: const Center(
-                              child: Text(
-                                ']',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      // Playback Position Indicator
-                      Positioned(
-                        left:
-                            ((_currentPlaybackPositionMs / videoDurationMs) *
-                                _thumbnailTotalWidth) -
-                            _scrollPosition,
-                        child: Container(
-                          width: 2,
-                          height: 80,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              );
-            },
-          ),
         ),
 
         // Status Display
