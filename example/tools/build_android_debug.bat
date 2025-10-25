@@ -17,3 +17,4 @@ echo.
 cd ..
 call flutter build apk --debug --target-platform android-arm64
 cd tools
+pause

@@ -15,6 +15,7 @@ import 'generators/audio_waveform_generator.dart';
 import 'widgets/media_timeline.dart';
 import 'widgets/media_player_widget.dart';
 import 'widgets/save_dialog.dart';
+import 'services/metadata_service.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:ffmpeg_kit_flutter_new_audio/ffmpeg_kit.dart';
@@ -731,6 +732,23 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
             _status = 'Audio saved to: $outputPath (${(fileSize / 1024).toStringAsFixed(1)} KB)';
           });
 
+          // Copy metadata from original file to saved file
+          try {
+            print('[Audio Export] Copying metadata from original to saved file...');
+            final metadataCopied = await MetadataService.copyMetadata(
+              mediaFile!,
+              outputFile,
+            );
+            if (metadataCopied) {
+              print('[Audio Export] Metadata copied successfully');
+            } else {
+              print('[Audio Export] Metadata copy failed or not applicable');
+            }
+          } catch (e) {
+            print('[Audio Export] Error copying metadata: $e');
+            // Continue even if metadata copy fails
+          }
+
           // Show success snackbar
           if (widget.options.showSavedSnackbar) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -850,6 +868,26 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
       setState(() {
         _status = 'Video saved to: ${finalPath ?? result ?? ''}';
       });
+
+      // Copy metadata from original file to saved file (for MP4 videos)
+      if (finalPath != null) {
+        try {
+          print('[Video Export] Copying metadata from original to saved file...');
+          final savedFile = File(finalPath);
+          final metadataCopied = await MetadataService.copyMetadata(
+            mediaFile!,
+            savedFile,
+          );
+          if (metadataCopied) {
+            print('[Video Export] Metadata copied successfully');
+          } else {
+            print('[Video Export] Metadata copy failed or not applicable');
+          }
+        } catch (e) {
+          print('[Video Export] Error copying metadata: $e');
+          // Continue even if metadata copy fails
+        }
+      }
 
       // Show snackbar if enabled
       if (widget.options.showSavedSnackbar) {
