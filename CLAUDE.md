@@ -1,0 +1,1 @@
+- use @example\tools\build_android_debug.bat to build

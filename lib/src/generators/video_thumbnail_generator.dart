@@ -15,11 +15,8 @@ class VideoThumbnailGenerator implements VisualDataGenerator {
   }) async {
     onStatusUpdate?.call('Generating thumbnails...');
 
-    // Optimize thumbnail count based on video duration
-    final int thumbnailCount = math.min(
-      80,
-      math.max(thumbnailSize, (durationMs / 500).round()),
-    );
+    // Generate one thumbnail every 10 seconds for better performance
+    final int thumbnailCount = math.max(1, (durationMs / 10000).round());
 
     List<Uint8List> thumbnails = [];
 

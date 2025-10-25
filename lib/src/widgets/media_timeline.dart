@@ -18,6 +18,8 @@ class MediaTimeline extends StatelessWidget {
   final Function(DragUpdateDetails) onStartMarkerDrag;
   final Function(DragUpdateDetails) onEndMarkerDrag;
   final EdgeInsets margin;
+  final double height;
+  final double segmentHeight;
 
   const MediaTimeline({
     Key? key,
@@ -36,12 +38,17 @@ class MediaTimeline extends StatelessWidget {
     required this.onStartMarkerDrag,
     required this.onEndMarkerDrag,
     required this.margin,
+    this.height = 100.0,
+    this.segmentHeight = 80.0,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    // Use actual thumbnail width if available, otherwise use viewport width as fallback
+    final effectiveWidth = thumbnailTotalWidth > 0 ? thumbnailTotalWidth : 800.0;
+
     return Container(
-      height: 100,
+      height: height,
       margin: margin,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -60,13 +67,13 @@ class MediaTimeline extends StatelessWidget {
                   child: visualData != null
                       ? SizedBox(
                           width: thumbnailTotalWidth,
-                          height: 80,
+                          height: segmentHeight,
                           child: Row(
                             children: List.generate(
                               visualData!.length,
                               (index) => Container(
                                 width: 30,
-                                height: 80,
+                                height: segmentHeight,
                                 decoration: BoxDecoration(
                                   image: DecorationImage(
                                     image: MemoryImage(visualData![index]),
@@ -78,13 +85,25 @@ class MediaTimeline extends StatelessWidget {
                           ),
                         )
                       : isGenerating
-                          ? Center(
-                              child: Text(
-                                generatingText,
-                                style: const TextStyle(color: Colors.white70),
+                          ? // Show grey placeholder bars while generating
+                          SizedBox(
+                              width: effectiveWidth,
+                              height: segmentHeight,
+                              child: Container(
+                                color: Colors.grey.shade800,
+                                child: Center(
+                                  child: Text(
+                                    generatingText,
+                                    style: const TextStyle(color: Colors.white70),
+                                  ),
+                                ),
                               ),
                             )
-                          : Container(),
+                          : Container(
+                              width: effectiveWidth,
+                              height: segmentHeight,
+                              color: Colors.grey.shade900,
+                            ),
                 ),
 
                 // Show loading indicator while generating
@@ -97,18 +116,19 @@ class MediaTimeline extends StatelessWidget {
                     ),
                   ),
 
-                // Only show the segment UI if visual data is ready
-                if (visualData != null) ...[
+                // Show segment UI as soon as we have duration info (don't wait for thumbnails)
+                if (videoDurationMs > 0) ...[
                   // Draggable Segment with Adjusted Positioning
                   Positioned(
-                    left: ((startMs / videoDurationMs) * thumbnailTotalWidth) -
+                    left: ((startMs / videoDurationMs) * effectiveWidth) -
                         scrollPosition,
                     child: GestureDetector(
+                      behavior: HitTestBehavior.deferToChild,
                       onHorizontalDragUpdate: onSegmentDrag,
                       child: Container(
                         width: ((endMs - startMs) / videoDurationMs) *
-                            thumbnailTotalWidth,
-                        height: 80,
+                            effectiveWidth,
+                        height: segmentHeight,
                         decoration: BoxDecoration(
                           border: Border.all(
                             color: slideAreaColor,
@@ -122,15 +142,17 @@ class MediaTimeline extends StatelessWidget {
 
                   // Start Marker [
                   Positioned(
-                    left: ((startMs / videoDurationMs) * thumbnailTotalWidth -
+                    left: ((startMs / videoDurationMs) * effectiveWidth -
                             10) -
                         scrollPosition,
                     child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
                       onHorizontalDragUpdate: onStartMarkerDrag,
                       child: Container(
-                        width: 20,
-                        height: 80,
+                        width: 30, // Wider hit area
+                        height: segmentHeight,
                         color: Colors.grey.shade900,
+                        padding: const EdgeInsets.only(left: 5),
                         child: const Center(
                           child: Text(
                             '[',
@@ -147,14 +169,16 @@ class MediaTimeline extends StatelessWidget {
 
                   // End Marker ]
                   Positioned(
-                    left: ((endMs / videoDurationMs) * thumbnailTotalWidth) -
+                    left: ((endMs / videoDurationMs) * effectiveWidth - 10) -
                         scrollPosition,
                     child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
                       onHorizontalDragUpdate: onEndMarkerDrag,
                       child: Container(
-                        width: 20,
-                        height: 80,
+                        width: 30, // Wider hit area
+                        height: segmentHeight,
                         color: Colors.grey.shade900,
+                        padding: const EdgeInsets.only(right: 5),
                         child: const Center(
                           child: Text(
                             ']',
@@ -172,11 +196,11 @@ class MediaTimeline extends StatelessWidget {
                   // Playback Position Indicator
                   Positioned(
                     left: ((currentPlaybackPositionMs / videoDurationMs) *
-                            thumbnailTotalWidth) -
+                            effectiveWidth) -
                         scrollPosition,
                     child: Container(
                       width: 2,
-                      height: 80,
+                      height: segmentHeight,
                       color: Colors.white,
                     ),
                   ),

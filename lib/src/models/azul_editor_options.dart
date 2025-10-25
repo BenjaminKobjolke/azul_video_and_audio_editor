@@ -59,6 +59,15 @@ class AzulEditorOptions {
   /// Timeline Margin
   final EdgeInsets timelineMargin;
 
+  /// Default filename prefix for saved files
+  final String defaultFilenamePrefix;
+
+  /// Whether to show save dialog before exporting
+  final bool showSaveDialog;
+
+  /// Whether to allow overwriting existing files
+  final bool allowOverwrite;
+
   const AzulEditorOptions({
     this.maxDurationMs = 15000,
     this.title = 'Video Editor',
@@ -79,5 +88,8 @@ class AzulEditorOptions {
     this.titleStyle,
     this.thumbnailGenerateText = "Generating thumbnails...",
     this.timelineMargin = const EdgeInsets.symmetric(horizontal: 16),
+    this.defaultFilenamePrefix = 'edited_',
+    this.showSaveDialog = true,
+    this.allowOverwrite = true,
   });
 }

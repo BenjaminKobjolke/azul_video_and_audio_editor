@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../models/media_controller.dart';
 import '../controllers/video_media_controller.dart';
+import '../controllers/audio_media_controller.dart';
+import 'audio_waveform_visualizer.dart';
 
 /// Reusable media player widget that adapts to video or audio
 class MediaPlayerWidget extends StatelessWidget {
@@ -10,6 +12,14 @@ class MediaPlayerWidget extends StatelessWidget {
   final VoidCallback onTogglePlayPause;
   final double? aspectRatio;
   final Color backgroundColor;
+  final double startMs;
+  final double endMs;
+  final double currentPositionMs;
+  final double? touchedPositionMs;
+  final Function(double)? onWaveformTouched;
+  final double audioZoomLevel;
+  final double? audioTargetScrollOffsetMs;
+  final Function(double)? onAudioScrollChanged;
 
   const MediaPlayerWidget({
     Key? key,
@@ -18,6 +28,14 @@ class MediaPlayerWidget extends StatelessWidget {
     required this.onTogglePlayPause,
     this.aspectRatio,
     required this.backgroundColor,
+    this.startMs = 0,
+    this.endMs = 0,
+    this.currentPositionMs = 0,
+    this.touchedPositionMs,
+    this.onWaveformTouched,
+    this.audioZoomLevel = 1.0,
+    this.audioTargetScrollOffsetMs,
+    this.onAudioScrollChanged,
   }) : super(key: key);
 
   @override
@@ -96,52 +114,24 @@ class MediaPlayerWidget extends StatelessWidget {
   }
 
   Widget _buildAudioPlayer() {
-    // TODO: Implement audio player UI
-    // For now, show a placeholder with play/pause control
-    return Container(
-      color: backgroundColor,
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.audiotrack,
-              size: 100,
-              color: Colors.white54,
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Audio Player',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Audio playback UI coming soon',
-              style: TextStyle(color: Colors.white70),
-            ),
-            const SizedBox(height: 30),
-            GestureDetector(
-              onTap: onTogglePlayPause,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  shape: BoxShape.circle,
-                ),
-                padding: const EdgeInsets.all(16),
-                child: Icon(
-                  isPlaying ? Icons.pause : Icons.play_arrow,
-                  color: Colors.white,
-                  size: 50,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+    final audioController = mediaController as AudioMediaController;
+    final samples = audioController.fullAudioSamples;
+    final durationMs = audioController.durationMs.toDouble();
+
+    return AudioWaveformVisualizer(
+      samples: samples,
+      startMs: startMs,
+      endMs: endMs > 0 ? endMs : durationMs,
+      durationMs: durationMs,
+      currentPositionMs: currentPositionMs,
+      touchedPositionMs: touchedPositionMs,
+      isPlaying: isPlaying,
+      onTogglePlayPause: onTogglePlayPause,
+      onWaveformTouched: onWaveformTouched,
+      zoomLevel: audioZoomLevel,
+      targetScrollOffsetMs: audioTargetScrollOffsetMs,
+      onScrollChanged: onAudioScrollChanged,
+      backgroundColor: backgroundColor,
     );
   }
 }
