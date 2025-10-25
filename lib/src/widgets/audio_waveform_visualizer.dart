@@ -162,35 +162,44 @@ class _AudioWaveformVisualizerState extends State<AudioWaveformVisualizer> {
 
   // Build waveform content based on extraction state
   Widget _buildWaveformContent(Size size) {
-    // If waveform extraction failed, show empty container
+    // If waveform extraction failed, show empty container (still interactive for gestures)
     if (widget.waveformExtractionFailed) {
-      return Container();
-    }
-
-    // If waveform is still loading, show spinner
-    if (!widget.isWaveformReady || widget.samples == null) {
-      return const Center(
-        child: CircularProgressIndicator(),
+      return Container(
+        color: Colors.transparent,
+        width: size.width,
+        height: size.height,
       );
     }
 
-    // Waveform is ready, show it
-    return CustomPaint(
-      painter: WaveformPainter(
-        samples: widget.samples!,
-        startMs: widget.startMs,
-        endMs: widget.endMs,
-        durationMs: widget.durationMs,
-        currentPositionMs: widget.currentPositionMs,
-        touchedPositionMs: widget.touchedPositionMs,
-        waveformColor: widget.waveformColor,
-        selectedRegionColor: widget.selectedRegionColor,
-        playbackLineColor: widget.playbackLineColor,
-        touchLineColor: widget.touchLineColor,
-        zoomLevel: _currentZoom,
-        scrollOffsetMs: _scrollOffset,
-      ),
-      size: size,
+    // Always render CustomPaint (even with null samples) to show markers immediately
+    // Spinner shown as overlay while waveform loads
+    return Stack(
+      children: [
+        // ALWAYS use CustomPaint - WaveformPainter handles null samples gracefully
+        CustomPaint(
+          painter: WaveformPainter(
+            samples: widget.samples, // Can be null - painter will skip waveform but draw markers
+            startMs: widget.startMs,
+            endMs: widget.endMs,
+            durationMs: widget.durationMs,
+            currentPositionMs: widget.currentPositionMs,
+            touchedPositionMs: widget.touchedPositionMs,
+            waveformColor: widget.waveformColor,
+            selectedRegionColor: widget.selectedRegionColor,
+            playbackLineColor: widget.playbackLineColor,
+            touchLineColor: widget.touchLineColor,
+            zoomLevel: _currentZoom,
+            scrollOffsetMs: _scrollOffset,
+          ),
+          size: size,
+        ),
+
+        // Show spinner overlay while loading (doesn't block gestures or markers)
+        if (!widget.isWaveformReady || widget.samples == null)
+          const Center(
+            child: CircularProgressIndicator(),
+          ),
+      ],
     );
   }
 

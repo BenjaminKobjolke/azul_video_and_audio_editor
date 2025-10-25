@@ -4,7 +4,7 @@ import 'dart:math' as math;
 
 /// Custom painter for waveform visualization (DAW-style)
 class WaveformPainter extends CustomPainter {
-  final Float32List samples;
+  final Float32List? samples;
   final double startMs;
   final double endMs;
   final double durationMs;
@@ -34,17 +34,19 @@ class WaveformPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (samples.isEmpty || durationMs <= 0) return;
+    if (durationMs <= 0) return;
 
-    final centerY = size.height / 2;
-
-    // Calculate visible time window
+    // Calculate visible time window (needed for both waveform and markers)
     final visibleDurationMs = durationMs / zoomLevel;
     final visibleStartMs = scrollOffsetMs;
     final visibleEndMs = math.min(scrollOffsetMs + visibleDurationMs, durationMs);
 
+    // Only draw waveform if samples exist
+    if (samples != null && samples!.isNotEmpty) {
+      final centerY = size.height / 2;
+
     // Calculate which samples to draw
-    final totalSamples = samples.length;
+    final totalSamples = samples!.length;
     final samplesPerMs = totalSamples / durationMs;
 
     final startSampleIndex = (visibleStartMs * samplesPerMs).floor();
@@ -56,7 +58,7 @@ class WaveformPainter extends CustomPainter {
     double maxAmplitude = 0.0;
     for (var i = startSampleIndex; i < endSampleIndex; i++) {
       final sampleIndex = i.clamp(0, totalSamples - 1);
-      final amplitude = samples[sampleIndex].abs();
+      final amplitude = samples![sampleIndex].abs();
       if (amplitude > maxAmplitude) {
         maxAmplitude = amplitude;
       }
@@ -89,7 +91,7 @@ class WaveformPainter extends CustomPainter {
       // Draw individual bars
       for (var i = startSampleIndex; i < endSampleIndex; i++) {
         final sampleIndex = i.clamp(0, totalSamples - 1);
-        final amplitude = (samples[sampleIndex].abs() * normalizationFactor).clamp(0.0, 1.0);
+        final amplitude = (samples![sampleIndex].abs() * normalizationFactor).clamp(0.0, 1.0);
         final barHeight = size.height * amplitude; // Use full height
 
         // Calculate X position in screen space
@@ -117,7 +119,7 @@ class WaveformPainter extends CustomPainter {
 
       for (var i = startSampleIndex; i < endSampleIndex; i++) {
         final sampleIndex = i.clamp(0, totalSamples - 1);
-        final amplitude = (samples[sampleIndex].abs() * normalizationFactor).clamp(0.0, 1.0);
+        final amplitude = (samples![sampleIndex].abs() * normalizationFactor).clamp(0.0, 1.0);
         final barHeight = size.height * amplitude;
 
         final x = (i - startSampleIndex) * pixelsPerSample;
@@ -138,8 +140,9 @@ class WaveformPainter extends CustomPainter {
       canvas.drawPath(dimPath, dimWavePaint..style = PaintingStyle.stroke);
       canvas.drawPath(brightPath, brightWavePaint..style = PaintingStyle.stroke);
     }
+    } // End waveform drawing block
 
-    // Convert time to screen X position
+    // Convert time to screen X position (helper function for marker drawing)
     double timeToScreenX(double timeMs) {
       return ((timeMs - visibleStartMs) / visibleDurationMs) * size.width;
     }
