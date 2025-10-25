@@ -98,6 +98,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
   double _audioZoomLevel = 1.0; // Zoom level for audio waveform
   double? _audioTargetScrollOffsetMs; // Target scroll position for audio waveform (set by Zoom Selection/All)
   bool _isLoopingSelection = false; // Whether selection is playing in loop mode
+  bool _bypassEndMarkerCheck = false; // Bypass end marker check when playing from position beyond end marker
 
   // Helper to get effective timeline width (with fallback before thumbnails load)
   double get _effectiveTimelineWidth {
@@ -253,23 +254,28 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
   void _checkMediaEnd() {
     if (mediaController != null &&
         mediaController!.isInitialized &&
-        mediaController!.isPlaying &&
-        _currentPlaybackPositionMs >= endMs) {
+        mediaController!.isPlaying) {
 
-      if (_isLoopingSelection) {
-        // Loop back to start and continue playing
-        mediaController!.seekTo(startMs.toInt());
-        setState(() {
-          _currentPlaybackPositionMs = startMs;
-        });
-      } else {
-        // Stop playback and seek to start
-        setState(() {
-          isPlaying = false;
-          mediaController!.pause();
-        });
-        _stopPlaybackPositionTimer();
-        _seekToStartMarker();
+      // Use end marker or file duration depending on bypass flag
+      final effectiveEndMs = _bypassEndMarkerCheck ? videoDurationMs : endMs;
+
+      if (_currentPlaybackPositionMs >= effectiveEndMs) {
+        if (_isLoopingSelection) {
+          // Loop back to start and continue playing
+          mediaController!.seekTo(startMs.toInt());
+          setState(() {
+            _currentPlaybackPositionMs = startMs;
+          });
+        } else {
+          // Stop playback and seek to start
+          setState(() {
+            isPlaying = false;
+            _bypassEndMarkerCheck = false; // Reset bypass flag
+            mediaController!.pause();
+          });
+          _stopPlaybackPositionTimer();
+          _seekToStartMarker();
+        }
       }
     }
   }
@@ -475,6 +481,12 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
     setState(() {
       _audioZoomLevel = 1.0; // Show entire audio file
       _audioTargetScrollOffsetMs = 0.0; // Reset scroll to beginning
+    });
+  }
+
+  void _onAudioZoomChanged(double newZoom) {
+    setState(() {
+      _audioZoomLevel = newZoom;
     });
   }
 
@@ -1008,15 +1020,35 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
   void _playFromPosition() async {
     if (mediaController == null || !mediaController!.isInitialized) return;
 
-    final playPosition = _touchedPositionMs ?? _currentPlaybackPositionMs;
+    // Play from touched position, or current playback position
+    // If current position is 0 (never played), fall back to start marker
+    final playPosition = _touchedPositionMs ??
+        (_currentPlaybackPositionMs > 0 ? _currentPlaybackPositionMs : startMs);
     await mediaController!.seekTo(playPosition.toInt());
     setState(() {
       _currentPlaybackPositionMs = playPosition;
       isPlaying = true;
       _isLoopingSelection = false; // Disable loop mode
+      _bypassEndMarkerCheck = playPosition > endMs; // Bypass end marker check if playing beyond it
     });
     await mediaController!.play();
     _startPlaybackPositionTimer();
+  }
+
+  void _stopPlayback() async {
+    if (mediaController == null || !mediaController!.isInitialized) return;
+
+    await mediaController!.pause();
+    await mediaController!.seekTo(startMs.toInt());
+
+    setState(() {
+      isPlaying = false;
+      _currentPlaybackPositionMs = startMs;
+      _touchedPositionMs = null; // Clear touch marker
+      _isLoopingSelection = false;
+    });
+
+    _stopPlaybackPositionTimer();
   }
 
   Widget _buildZoomButton(String label, double durationMs) {
@@ -1042,6 +1074,151 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
             fontSize: 12,
             fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextControl(String label, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPipeSeparator() {
+    return Text(
+      '|',
+      style: TextStyle(
+        color: widget.options.primaryColor.withOpacity(0.4),
+        fontSize: 16,
+      ),
+    );
+  }
+
+  Widget _buildPlayMenuButton() {
+    return PopupMenuButton<String>(
+      onSelected: (value) {
+        switch (value) {
+          case 'all':
+            _playEntireFile();
+            break;
+          case 'selection':
+            _playSelection();
+            break;
+          case 'from_here':
+            _playFromPosition();
+            break;
+          case 'stop':
+            _stopPlayback();
+            break;
+        }
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(value: 'all', child: Text('All')),
+        const PopupMenuItem(value: 'selection', child: Text('Selection')),
+        const PopupMenuItem(value: 'from_here', child: Text('From Here')),
+        const PopupMenuItem(value: 'stop', child: Text('Stop')),
+      ],
+      child: ElevatedButton.icon(
+        onPressed: null, // PopupMenuButton handles tap
+        icon: const Icon(Icons.play_circle_outline, size: 20),
+        label: const Text('play'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: widget.options.primaryColor,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: widget.options.primaryColor,
+          disabledForegroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildZoomMenuButton() {
+    return PopupMenuButton<String>(
+      onSelected: (value) {
+        switch (value) {
+          case 'selection':
+            _zoomToSelection();
+            break;
+          case 'all':
+            _zoomToAll();
+            break;
+        }
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(value: 'selection', child: Text('Selection')),
+        const PopupMenuItem(value: 'all', child: Text('All')),
+      ],
+      child: ElevatedButton.icon(
+        onPressed: null, // PopupMenuButton handles tap
+        icon: const Icon(Icons.zoom_in, size: 20),
+        label: const Text('zoom'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: widget.options.primaryColor,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: widget.options.primaryColor,
+          disabledForegroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMarkerMenuButton() {
+    return PopupMenuButton<String>(
+      onSelected: (value) {
+        switch (value) {
+          case 'start_begin':
+            _setStartMarkerToBeginning();
+            break;
+          case 'end_max':
+            _setEndMarkerToEnd();
+            break;
+          case 'start_touch':
+            _setStartToTouchedPosition();
+            break;
+          case 'end_touch':
+            _setEndToTouchedPosition();
+            break;
+        }
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(value: 'start_begin', child: Text('Start → 0:00')),
+        const PopupMenuItem(value: 'end_max', child: Text('End → Max')),
+        if (_touchedPositionMs != null) ...[
+          const PopupMenuDivider(),
+          PopupMenuItem(
+            value: 'start_touch',
+            child: Text('Start @ ${(_touchedPositionMs! / 1000).toStringAsFixed(1)}s'),
+          ),
+          PopupMenuItem(
+            value: 'end_touch',
+            child: Text('End @ ${(_touchedPositionMs! / 1000).toStringAsFixed(1)}s'),
+          ),
+        ],
+      ],
+      child: ElevatedButton.icon(
+        onPressed: null, // PopupMenuButton handles tap
+        icon: const Icon(Icons.location_on, size: 20),
+        label: const Text('marker'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: widget.options.primaryColor,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: widget.options.primaryColor,
+          disabledForegroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 12),
         ),
       ),
     );
@@ -1200,6 +1377,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
                       // Optional: Track user's manual scroll position if needed
                       // For now, we don't need to do anything here
                     },
+                    onAudioZoomChanged: _onAudioZoomChanged,
                   )
                 : const Center(child: CircularProgressIndicator()),
           ),
@@ -1230,53 +1408,17 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
           const SizedBox(height: 5),
         ],
 
-        // Audio Playback Buttons (only for audio files)
+        // Audio Controls - Menu Button Style
         if (mediaType == MediaType.audio && isInitialized) ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
               children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _playEntireFile,
-                    icon: const Icon(Icons.play_circle_outline, size: 24),
-                    label: const Text('Play All', style: TextStyle(fontSize: 16)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: widget.options.primaryColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      minimumSize: const Size(0, 52),
-                    ),
-                  ),
-                ),
+                Expanded(child: _buildPlayMenuButton()),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _playSelection,
-                    icon: const Icon(Icons.playlist_play, size: 24),
-                    label: const Text('Selection', style: TextStyle(fontSize: 16)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green.shade700,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      minimumSize: const Size(0, 52),
-                    ),
-                  ),
-                ),
+                Expanded(child: _buildZoomMenuButton()),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _playFromPosition,
-                    icon: const Icon(Icons.play_arrow, size: 24),
-                    label: const Text('From Here', style: TextStyle(fontSize: 16)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue.shade700,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      minimumSize: const Size(0, 52),
-                    ),
-                  ),
-                ),
+                Expanded(child: _buildMarkerMenuButton()),
               ],
             ),
           ),
@@ -1337,124 +1479,6 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
             ),
           ),
           const SizedBox(height: 8),
-        ],
-
-        // Zoom buttons for audio
-        if (isInitialized && mediaType == MediaType.audio) ...[
-          // Simplified zoom buttons
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _zoomToSelection,
-                    icon: const Icon(Icons.zoom_in_map, size: 20),
-                    label: const Text('Zoom Selection', style: TextStyle(fontSize: 14)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: widget.options.primaryColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      minimumSize: const Size(0, 48),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _zoomToAll,
-                    icon: const Icon(Icons.zoom_out_map, size: 20),
-                    label: const Text('Zoom All', style: TextStyle(fontSize: 14)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: widget.options.primaryColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      minimumSize: const Size(0, 48),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Marker reset buttons
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _setStartMarkerToBeginning,
-                    icon: const Icon(Icons.first_page, size: 18),
-                    label: const Text('Start → 0:00', style: TextStyle(fontSize: 13)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal.shade700,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      minimumSize: const Size(0, 42),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _setEndMarkerToEnd,
-                    icon: const Icon(Icons.last_page, size: 18),
-                    label: const Text('End → Max', style: TextStyle(fontSize: 13)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal.shade700,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      minimumSize: const Size(0, 42),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-
-        // Set Start/Set End buttons for audio (only show if user has touched waveform)
-        if (_touchedPositionMs != null && mediaType == MediaType.audio) ...[
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _setStartToTouchedPosition,
-                    icon: const Icon(Icons.start, size: 20),
-                    label: Text(
-                      'Set Start (${(_touchedPositionMs! / 1000).toStringAsFixed(1)}s)',
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green.shade700,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      minimumSize: const Size(0, 48),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _setEndToTouchedPosition,
-                    icon: const Icon(Icons.stop, size: 20),
-                    label: Text(
-                      'Set End (${(_touchedPositionMs! / 1000).toStringAsFixed(1)}s)',
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade700,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      minimumSize: const Size(0, 48),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
 
         // Timeline with Thumbnails/Waveforms and Selection Markers (hide for audio)

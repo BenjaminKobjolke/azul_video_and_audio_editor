@@ -80,9 +80,19 @@ class AudioMediaController implements MediaController {
 
   @override
   Future<void> seekTo(int milliseconds) async {
-    if (_handle == null || _source == null) return;
+    if (_source == null) return;
 
     try {
+      // If no handle exists, create one by starting playback then pausing
+      // This allows seeking before first playback
+      if (_handle == null) {
+        _handle = await _soloud.play(_source!);
+        await Future.delayed(const Duration(milliseconds: 10)); // Brief delay for handle initialization
+        _soloud.setPause(_handle!, true);
+        _isPlaying = false;
+      }
+
+      // Now we have a handle, so we can seek
       _soloud.seek(_handle!, Duration(milliseconds: milliseconds));
       _notifyListeners();
     } catch (e) {

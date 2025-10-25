@@ -18,6 +18,7 @@ class AudioWaveformVisualizer extends StatefulWidget {
   final double zoomLevel;
   final double? targetScrollOffsetMs; // Target scroll position from parent (e.g., from Zoom Selection)
   final Function(double scrollOffsetMs)? onScrollChanged; // Callback when user scrolls manually
+  final Function(double zoomLevel)? onZoomChanged; // Callback when pinch zoom changes zoom level
   final Color backgroundColor;
   final Color waveformColor;
   final Color selectedRegionColor;
@@ -38,6 +39,7 @@ class AudioWaveformVisualizer extends StatefulWidget {
     this.zoomLevel = 1.0,
     this.targetScrollOffsetMs,
     this.onScrollChanged,
+    this.onZoomChanged,
     this.backgroundColor = const Color(0xFF2C3E50),
     this.waveformColor = Colors.yellowAccent,
     this.selectedRegionColor = const Color(0x8800FF00),
@@ -145,6 +147,11 @@ class _AudioWaveformVisualizerState extends State<AudioWaveformVisualizer> {
         _scrollOffset = _scrollOffset.clamp(0.0, math.max(0, widget.durationMs - newVisibleDuration));
 
         _currentZoom = newZoom;
+
+        // Notify parent of zoom change
+        if (widget.onZoomChanged != null) {
+          widget.onZoomChanged!(newZoom);
+        }
       }
     });
   }

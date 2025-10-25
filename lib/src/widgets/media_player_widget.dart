@@ -20,6 +20,7 @@ class MediaPlayerWidget extends StatelessWidget {
   final double audioZoomLevel;
   final double? audioTargetScrollOffsetMs;
   final Function(double)? onAudioScrollChanged;
+  final Function(double)? onAudioZoomChanged;
 
   const MediaPlayerWidget({
     Key? key,
@@ -36,6 +37,7 @@ class MediaPlayerWidget extends StatelessWidget {
     this.audioZoomLevel = 1.0,
     this.audioTargetScrollOffsetMs,
     this.onAudioScrollChanged,
+    this.onAudioZoomChanged,
   }) : super(key: key);
 
   @override
@@ -131,6 +133,7 @@ class MediaPlayerWidget extends StatelessWidget {
       zoomLevel: audioZoomLevel,
       targetScrollOffsetMs: audioTargetScrollOffsetMs,
       onScrollChanged: onAudioScrollChanged,
+      onZoomChanged: onAudioZoomChanged,
       backgroundColor: backgroundColor,
     );
   }
