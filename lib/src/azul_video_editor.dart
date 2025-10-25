@@ -1161,11 +1161,63 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
     );
   }
 
+  /// Check if user has made any edits to the media (moved markers from default positions)
+  bool _hasUnsavedChanges() {
+    if (!isInitialized || videoDurationMs == 0) return false;
+
+    // Check if markers have been moved from default positions
+    final markersChanged = startMs != 0 || endMs != videoDurationMs;
+
+    return markersChanged;
+  }
+
+  /// Show confirmation dialog for unsaved changes
+  Future<bool> _showDiscardChangesDialog(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text('You have unsaved changes. Do you want to discard them?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false), // Stay
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true), // Discard
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+
+    return result ?? false; // Default to false (stay) if dialog dismissed
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: widget.options.backgroundColor,
-      appBar: AppBar(
+    return PopScope(
+      canPop: !_isSaving && !_hasUnsavedChanges(), // Block back if saving or has unsaved changes
+      onPopInvokedWithResult: (bool didPop, dynamic result) async {
+        if (didPop) return;
+
+        // If blocked due to save, do nothing (save must complete)
+        if (_isSaving) {
+          return;
+        }
+
+        // If blocked due to unsaved changes, show confirmation dialog
+        if (_hasUnsavedChanges()) {
+          final shouldDiscard = await _showDiscardChangesDialog(context);
+          if (shouldDiscard && context.mounted) {
+            Navigator.of(context).pop();
+          }
+          return;
+        }
+      },
+      child: Scaffold(
+        backgroundColor: widget.options.backgroundColor,
+        appBar: AppBar(
         title: Text(
           widget.options.title,
           style:
@@ -1196,8 +1248,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
 
           // Fullscreen blocking overlay when saving
           if (_isSaving)
-            IgnorePointer(
-              ignoring: true,
+            AbsorbPointer(
               child: Container(
                 color: Colors.black87,
                 child: Center(
@@ -1223,7 +1274,8 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
             ),
         ],
       ),
-    );
+      ), // Scaffold
+    ); // PopScope
   }
 
   Widget _buildMediaEditorContent() {
