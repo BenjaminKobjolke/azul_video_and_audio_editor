@@ -76,6 +76,8 @@ class MediaPlayerWidget extends StatelessWidget {
   Widget _buildVideoPlayer() {
     final videoController = mediaController as VideoMediaController;
     final controller = videoController.videoController;
+    final samples = videoController.fullAudioSamples;
+    final durationMs = videoController.durationMs.toDouble();
 
     if (controller == null) {
       return Container(
@@ -89,26 +91,41 @@ class MediaPlayerWidget extends StatelessWidget {
       );
     }
 
-    return Stack(
-      alignment: Alignment.center,
+    // Video editing UI: Video player on top, waveform below
+    return Column(
       children: [
-        AspectRatio(
-          aspectRatio: aspectRatio ?? videoController.aspectRatio,
-          child: VideoPlayer(controller),
-        ),
-        GestureDetector(
-          onTap: onTogglePlayPause,
+        // Top: Video player (no play/pause overlay)
+        Expanded(
+          flex: 1,
           child: Container(
-            decoration: const BoxDecoration(
-              color: Colors.black45,
-              shape: BoxShape.circle,
+            color: Colors.black,
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: aspectRatio ?? videoController.aspectRatio,
+                child: VideoPlayer(controller),
+              ),
             ),
-            padding: const EdgeInsets.all(16),
-            child: Icon(
-              isPlaying ? Icons.pause : Icons.play_arrow,
-              color: Colors.white,
-              size: 50,
-            ),
+          ),
+        ),
+
+        // Bottom: Audio waveform visualization (reused component)
+        Expanded(
+          flex: 1,
+          child: AudioWaveformVisualizer(
+            samples: samples,
+            startMs: startMs,
+            endMs: endMs > 0 ? endMs : durationMs,
+            durationMs: durationMs,
+            currentPositionMs: currentPositionMs,
+            touchedPositionMs: touchedPositionMs,
+            isPlaying: isPlaying,
+            onTogglePlayPause: onTogglePlayPause,
+            onWaveformTouched: onWaveformTouched,
+            zoomLevel: audioZoomLevel,
+            targetScrollOffsetMs: audioTargetScrollOffsetMs,
+            onScrollChanged: onAudioScrollChanged,
+            onZoomChanged: onAudioZoomChanged,
+            backgroundColor: backgroundColor,
           ),
         ),
       ],

@@ -52,6 +52,19 @@ class WaveformPainter extends CustomPainter {
 
     if (startSampleIndex >= endSampleIndex) return;
 
+    // Find maximum amplitude in visible samples for normalization
+    double maxAmplitude = 0.0;
+    for (var i = startSampleIndex; i < endSampleIndex; i++) {
+      final sampleIndex = i.clamp(0, totalSamples - 1);
+      final amplitude = samples[sampleIndex].abs();
+      if (amplitude > maxAmplitude) {
+        maxAmplitude = amplitude;
+      }
+    }
+
+    // Normalization factor (avoid division by zero)
+    final normalizationFactor = maxAmplitude > 0.0 ? 1.0 / maxAmplitude : 1.0;
+
     // Calculate how many pixels per sample
     final visibleSampleCount = endSampleIndex - startSampleIndex;
     final pixelsPerSample = size.width / visibleSampleCount;
@@ -76,8 +89,8 @@ class WaveformPainter extends CustomPainter {
       // Draw individual bars
       for (var i = startSampleIndex; i < endSampleIndex; i++) {
         final sampleIndex = i.clamp(0, totalSamples - 1);
-        final amplitude = samples[sampleIndex].abs().clamp(0.0, 1.0);
-        final barHeight = size.height * amplitude * 0.8; // 80% of height max
+        final amplitude = (samples[sampleIndex].abs() * normalizationFactor).clamp(0.0, 1.0);
+        final barHeight = size.height * amplitude; // Use full height
 
         // Calculate X position in screen space
         final x = (i - startSampleIndex) * pixelsPerSample + (pixelsPerSample / 2);
@@ -100,20 +113,24 @@ class WaveformPainter extends CustomPainter {
       // Draw as continuous path
       final dimPath = Path();
       final brightPath = Path();
+      Path? lastPath; // Track which path we're currently drawing to
 
       for (var i = startSampleIndex; i < endSampleIndex; i++) {
         final sampleIndex = i.clamp(0, totalSamples - 1);
-        final amplitude = samples[sampleIndex].abs().clamp(0.0, 1.0);
-        final barHeight = size.height * amplitude * 0.8;
+        final amplitude = (samples[sampleIndex].abs() * normalizationFactor).clamp(0.0, 1.0);
+        final barHeight = size.height * amplitude;
 
         final x = (i - startSampleIndex) * pixelsPerSample;
         final sampleTimeMs = (i / samplesPerMs);
 
         final path = (sampleTimeMs >= startMs && sampleTimeMs <= endMs) ? brightPath : dimPath;
 
-        if (i == startSampleIndex || (sampleTimeMs == startMs)) {
+        // If switching to a different path, start a new subpath
+        if (path != lastPath) {
           path.moveTo(x, centerY - barHeight / 2);
+          lastPath = path;
         }
+
         path.lineTo(x, centerY - barHeight / 2);
         path.lineTo(x, centerY + barHeight / 2);
       }

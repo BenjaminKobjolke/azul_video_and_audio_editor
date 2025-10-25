@@ -60,6 +60,9 @@ class AzulEditorOptions {
   /// Localized strings for the editor UI
   final AzulEditorStrings strings;
 
+  /// Optional subfolder path for saving files (e.g., "myapp" creates Music/myapp/)
+  final String? saveSubfolder;
+
   const AzulEditorOptions({
     this.maxDurationMs = 15000,
     this.title = 'Video Editor',
@@ -80,5 +83,6 @@ class AzulEditorOptions {
     this.thumbnailGenerateText = "Generating thumbnails...",
     this.timelineMargin = const EdgeInsets.symmetric(horizontal: 16),
     this.strings = const AzulEditorStrings(),
+    this.saveSubfolder,
   });
 }

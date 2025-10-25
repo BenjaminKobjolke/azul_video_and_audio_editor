@@ -1,20 +1,31 @@
 # Azul Video Editor
 
-A Flutter package for seamless video editing with powerful trimming capabilities. Azul Video Editor provides an intuitive interface for trimming videos, previewing edits in real-time, and customizing the editing experience.
+A Flutter package for seamless video and audio editing with powerful trimming capabilities. Azul Video Editor provides an intuitive interface for trimming media files, previewing edits in real-time with waveform visualization, and customizing the editing experience.
 
 ## Features
 
-- **Video Trimming**: Easily trim videos to your desired length.
-- **Auto File Picking**: Automatically open a file picker to select videos.
-- **Real-Time Preview**: Preview edits instantly as you adjust the timeline.
-- **Timeline with Thumbnails**: Navigate videos with a thumbnail-based timeline.
-- **Customizable UI**: Tailor colors, text, and aspect ratios to match your app.
-- **Easy Integration**: Simple API for quick setup in any Flutter project.
+- **Video & Audio Editing**: Trim both video and audio files with a unified interface
+- **Waveform Visualization**: Visual audio waveform for precise editing
+- **Real-Time Preview**: Preview edits instantly as you adjust markers
+- **Interactive Controls**: Play, zoom, and marker controls for efficient editing
+- **Internationalization (i18n)**: Full support for custom UI strings in any language
+- **Customizable UI**: Tailor colors, text, and aspect ratios to match your app
+- **Auto-Normalized Waveforms**: Audio waveforms automatically scale for optimal visibility
+- **Subfolder Organization**: Organize saved files into custom subfolders
+- **Comprehensive Logging**: FFmpeg logs for debugging export issues
+- **Easy Integration**: Simple API for quick setup in any Flutter project
 
 ## Screenshots
 
-<img src="https://github.com/azulmouad/azul_video_editor/raw/main/screenshots/screenshot.gif" alt="Video Editor Demo" width="300" />
+<img src="https://github.com/BenjaminKobjolke/azul_video_and_audio_editor/raw/main/screenshots/screenshot.png" alt="Video Editor Demo" width="300" />
 
+## Supported Formats
+
+### Video Formats
+MP4, MOV, AVI, MKV, FLV, WMV, WebM, M4V, MPEG, MPG, 3GP
+
+### Audio Formats
+MP3, WAV, AAC, FLAC, OGG, WMA, M4A, Opus, AIFF, ALAC
 
 ## Installation
 
@@ -23,6 +34,7 @@ Add the package to your project by including it in your `pubspec.yaml`:
 ```yaml
 dependencies:
   azul_video_editor: ^0.0.1
+  file_picker: ^8.1.6  # For picking media files
 ```
 
 Run the following command to fetch the package:
@@ -46,6 +58,7 @@ For Android 13 (API 33) and above, you may need to use granular media permission
 
 ```xml
 <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+<uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
 ```
 
 **Note**: If targeting Android 11 (API 30) or higher, ensure your app handles [scoped storage](https://developer.android.com/training/data-storage) requirements. You may need to add `requestLegacyExternalStorage="true"` in the `<application>` tag for older apps:
@@ -72,9 +85,9 @@ Azul Video Editor requires **iOS 13.0** or later. Add the following keys to your
 
 ```xml
 <key>NSPhotoLibraryUsageDescription</key>
-<string>This app requires access to the photo library for video editing.</string>
+<string>This app requires access to the photo library for media editing.</string>
 <key>NSPhotoLibraryAddUsageDescription</key>
-<string>This app requires access to the photo library to save edited videos.</string>
+<string>This app requires access to the photo library to save edited media.</string>
 ```
 
 Ensure your `Podfile` (in `ios/Podfile`) specifies at least iOS 13.0:
@@ -91,113 +104,280 @@ cd ios && pod install
 
 ## Usage
 
-Azul Video Editor offers a flexible API for integrating video editing into your Flutter app. Below are examples of common use cases.
+### Basic Usage
 
-### Basic Usage (Auto Pick Video)
-
-Open the editor with a single line of code. The file picker opens automatically, and the result is the path to the edited video:
+The library requires you to provide a `File` object. Here's a complete example with file picking:
 
 ```dart
 import 'package:flutter/material.dart';
 import 'package:azul_video_editor/azul_video_editor.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:io';
 
-void openEditor(BuildContext context) async {
-  // Open the editor and get the result
-  final String? result = await AzulVideoEditor.openEditor(context);
+Future<void> openEditor(BuildContext context) async {
+  // Pick a media file
+  FilePickerResult? result = await FilePicker.platform.pickFiles(
+    type: FileType.custom,
+    allowedExtensions: [
+      'mp4', 'mov', 'avi', 'mkv',  // Video formats
+      'mp3', 'wav', 'aac', 'flac',  // Audio formats
+    ],
+  );
 
-  if (result != null) {
-    print('Edited video path: $result');
+  if (result != null && result.files.single.path != null) {
+    File mediaFile = File(result.files.single.path!);
+
+    // Open the editor
+    final editorResult = await AzulVideoEditor.openEditor(context, mediaFile);
+
+    if (editorResult != null && editorResult['success'] == 'true') {
+      final tempFilePath = editorResult['path'];
+      print('Media edited successfully: $tempFilePath');
+
+      // Handle the temp file (rename, move, etc.)
+      // The library returns a temp file - you decide what to do with it
+    } else {
+      // Handle error
+      print('Error: ${editorResult?['error']}');
+    }
   }
 }
 ```
 
-### Manual Video Selection
+### Return Value Structure
 
-Disable auto-pick to show a video selection button:
+The editor returns a `Map<String, String>?` with the following keys:
+
+| Key | Description |
+|-----|-------------|
+| `success` | `'true'` if export succeeded, `'false'` otherwise |
+| `path` | Path to the temp exported file (only if success is true) |
+| `error` | Error message (only if success is false) |
+| `logFilePath` | Path to FFmpeg log file for debugging |
+
+### Handling the Result
 
 ```dart
-final String? result = await AzulVideoEditor.openEditor(
-  context,
-  autoPickVideo: false,
-);
+final result = await AzulVideoEditor.openEditor(context, mediaFile);
 
-if (result != null) {
-  print('Edited video path: $result');
+if (result == null) {
+  // User cancelled editing
+  return;
+}
+
+if (result['success'] == 'true') {
+  final tempFilePath = result['path']!;
+
+  // The library saved to a temp file with format: yyyyMMdd_temp.ext
+  // Now you can:
+  // 1. Show a dialog to get final filename from user
+  // 2. Rename/move the file
+  // 3. Upload it
+  // 4. etc.
+
+  final finalPath = await _showSaveDialog(tempFilePath);
+  if (finalPath != null) {
+    // Rename temp file to final name
+    await File(tempFilePath).rename(finalPath);
+  }
+} else {
+  // Export failed
+  print('Export failed: ${result['error']}');
+
+  // Check logs for debugging
+  if (result['logFilePath']?.isNotEmpty ?? false) {
+    final logs = await File(result['logFilePath']!).readAsString();
+    print('FFmpeg logs: $logs');
+  }
 }
 ```
 
 ### With Customization
 
-Customize the editor’s appearance and behavior using `AzulEditorOptions`:
+Customize the editor's appearance and behavior using `AzulEditorOptions`:
 
 ```dart
 final options = AzulEditorOptions(
   maxDurationMs: 30000, // 30 seconds max duration
-  title: 'My Video Editor',
+  title: 'My Media Editor',
   primaryColor: Colors.purple,
   backgroundColor: Colors.black,
   videoBackgroundColor: Colors.grey[900]!,
-  saveButtonText: 'Export Video',
   thumbnailSize: 30,
-  aspectRatio: 16 / 9, // Force 16:9 aspect ratio
+  aspectRatio: 16 / 9, // Force 16:9 aspect ratio for videos
   showDuration: true,
   videoMargin: 20.0,
   videoRadius: 10.0,
   slideAreaColor: Colors.yellow,
+  saveSubfolder: 'myapp', // Save to Music/myapp or Movies/myapp
 );
 
-final String? result = await AzulVideoEditor.openEditor(
+final result = await AzulVideoEditor.openEditor(
   context,
+  mediaFile,
   options: options,
 );
-
-if (result != null) {
-  print('Edited video path: $result');
-}
 ```
 
-### With an Initial Video File
+### Subfolder Organization
 
-If you already have a video file, pass it directly to the editor:
+Use the `saveSubfolder` option to organize exported files:
 
 ```dart
-import 'dart:io';
-
-File videoFile = File('/path/to/video.mp4');
-
-final String? result = await AzulVideoEditor.openEditor(
-  context,
-  initialVideoFile: videoFile,
+final options = AzulEditorOptions(
+  saveSubfolder: 'myapp',
 );
 
-if (result != null) {
-  print('Edited video path: $result');
+final result = await AzulVideoEditor.openEditor(context, mediaFile, options: options);
+
+// Files will be saved to:
+// - Audio: Music/myapp/20251025_temp.mp3
+// - Video: Movies/myapp/20251025_temp.mp4
+// - iOS: Documents/myapp/20251025_temp.mp4
+```
+
+## Internationalization (i18n)
+
+Azul Video Editor supports full customization of all UI strings through the `AzulEditorStrings` class. This allows you to translate the interface into any language.
+
+### Available Strings
+
+All UI text can be customized through `AzulEditorStrings`:
+
+```dart
+class AzulEditorStrings {
+  // App/Editor
+  final String title;
+  final String saveButtonText;
+
+  // Menu buttons
+  final String playMenuLabel;
+  final String zoomMenuLabel;
+  final String markerMenuLabel;
+  final String actionsMenuLabel;
+
+  // Play menu items
+  final String playAll;
+  final String playSelection;
+  final String playFromHere;
+  final String playPause;
+  final String playResume;
+  final String playStop;
+
+  // Zoom menu items
+  final String zoomSelection;
+  final String zoomAll;
+
+  // Marker menu items
+  final String markerStartToBeginning;
+  final String markerEndToMax;
+  final String markerStartAt;
+  final String markerEndAt;
+
+  // Actions menu items
+  final String actionsSave;
+
+  // Duration display
+  final String durationStart;
+  final String durationLabel;
+  final String durationEnd;
+
+  // Status messages
+  final String statusNoMediaSelected;
+  final String statusVideoSelected;
+  final String statusAudioSelected;
+  final String statusMediaSelected;
+  final String statusUnsupportedMedia;
+  final String statusErrorInitializing;
+  final String statusGeneratingThumbnails;
+  final String statusGeneratingWaveforms;
+  final String statusReadyToEdit;
+  final String statusErrorGenerating;
+  final String statusProcessingAudio;
+  final String statusProcessingVideo;
+  final String statusAudioSaved;
+  final String statusVideoSaved;
+  final String statusErrorSavingAudio;
+  final String statusErrorSavingMedia;
+
+  // Saving overlay
+  final String savingAudio;
+  final String savingVideo;
+
+  // Error messages
+  final String errorInvalidDuration;
+  final String errorNoLogs;
+  final String errorOutputEmpty;
+  final String errorFFmpegFailed;
 }
 ```
 
-### Advanced Usage (Widget Integration)
-
-For full control, embed the `AzulVideoEditor` widget in your navigation stack:
+### Spanish Translation Example
 
 ```dart
-Navigator.of(context).push(
-  MaterialPageRoute(
-    builder: (context) => AzulVideoEditor(
-      options: AzulEditorOptions(
-        maxDurationMs: 10000,
-        title: 'Custom Editor',
-        primaryColor: Colors.blue,
-        showDuration: true,
-        videoMargin: 16.0,
-        videoRadius: 12.0,
-        slideAreaColor: Colors.yellow,
-      ),
-      onVideoSaved: (path) {
-        print('Video saved to: $path');
-      },
-      autoPickVideo: true,
-    ),
-  ),
+final spanishStrings = AzulEditorStrings(
+  title: 'Editor de Medios',
+  saveButtonText: 'Guardar',
+
+  playMenuLabel: 'reproducir',
+  zoomMenuLabel: 'zoom',
+  markerMenuLabel: 'marcador',
+  actionsMenuLabel: 'acciones',
+
+  playAll: 'Todo',
+  playSelection: 'Selección',
+  playFromHere: 'Desde Aquí',
+  playPause: 'Pausar',
+  playResume: 'Reanudar',
+  playStop: 'Detener',
+
+  zoomSelection: 'Selección',
+  zoomAll: 'Todo',
+
+  markerStartToBeginning: 'Inicio → 0:00',
+  markerEndToMax: 'Fin → Máx',
+  markerStartAt: 'Inicio @ ',
+  markerEndAt: 'Fin @ ',
+
+  actionsSave: 'Guardar Selección',
+
+  durationStart: 'Inicio:',
+  durationLabel: 'Duración:',
+  durationEnd: 'Fin:',
+
+  savingAudio: 'Guardando audio...',
+  savingVideo: 'Guardando video...',
+);
+
+final options = AzulEditorOptions(
+  strings: spanishStrings,
+  title: 'Editor de Medios', // Also set in options for consistency
+);
+
+final result = await AzulVideoEditor.openEditor(context, mediaFile, options: options);
+```
+
+### French Translation Example
+
+```dart
+final frenchStrings = AzulEditorStrings(
+  title: 'Éditeur de Médias',
+  playMenuLabel: 'lecture',
+  zoomMenuLabel: 'zoom',
+  markerMenuLabel: 'marqueur',
+  actionsMenuLabel: 'actions',
+
+  playAll: 'Tout',
+  playSelection: 'Sélection',
+  playFromHere: 'Depuis Ici',
+  playPause: 'Pause',
+  playResume: 'Reprendre',
+  playStop: 'Arrêter',
+
+  actionsSave: 'Enregistrer Sélection',
+
+  savingAudio: 'Enregistrement audio...',
+  savingVideo: 'Enregistrement vidéo...',
 );
 ```
 
@@ -205,31 +385,202 @@ Navigator.of(context).push(
 
 Customize the editor with `AzulEditorOptions`:
 
-| Option                     | Description                                                                 | Default Value                     |
-|----------------------------|-----------------------------------------------------------------------------|-----------------------------------|
-| `maxDurationMs`            | Maximum video duration in milliseconds                                      | `15000` (15 seconds)              |
-| `showDuration`             | Show video duration (start, duration, end) in the UI                        | `true`                            |
-| `videoMargin`              | Margin around the video player                                              | `16.0`                            |
-| `videoRadius`              | Border radius for the video player                                          | `12.0`                            |
-| `slideAreaColor`           | Color of the slider area in the timeline                                    | `Colors.yellow`                   |
-| `title`                    | Title displayed on the editor page                                          | `'Video Editor'`                  |
-| `titleStyle`               | Text style for the title                                                    | `null` (uses default style)       |
-| `primaryColor`             | Primary color for UI elements (buttons, sliders, etc.)                      | `Color(0xFF6A11CB)`               |
-| `backgroundColor`          | Background color of the editor screen                                       | `Color(0xFF2C3E50)`               |
-| `videoBackgroundColor`     | Background color behind the video player                                    | `Color(0xFF1E2430)`               |
-| `saveButtonWidget`         | Custom widget for the save button                                           | `null` (uses default button)      |
-| `saveButtonText`           | Text for the save button                                                    | `'Save'`                          |
-| `saveButtonTextColor`      | Color of the save button’s text                                             | `Colors.white`                    |
-| `showSavedSnackbar`        | Show a snackbar after saving the video                                      | `true`                            |
-| `thumbnailSize`            | Base size (in pixels) for timeline thumbnails                               | `20`                              |
-| `thumbnailGenerateText`    | Text shown while generating thumbnails                                      | `'Generating thumbnails...'`      |
-| `aspectRatio`              | Force a specific aspect ratio for the video player                          | `null` (original video ratio)     |
-| `leadingWidget`            | Custom leading widget (e.g., back button)                                   | `null` (uses default)             |
-| `timelineMargin`           | Margin around the timeline                                                  | `EdgeInsets.symmetric(horizontal: 16)` |
+| Option | Type | Description | Default Value |
+|--------|------|-------------|---------------|
+| `maxDurationMs` | `int` | Maximum media duration in milliseconds | `15000` (15 seconds) |
+| `showDuration` | `bool` | Show duration info (start, duration, end) | `true` |
+| `videoMargin` | `double` | Margin around the media player | `16.0` |
+| `videoRadius` | `double` | Border radius for the media player | `12.0` |
+| `slideAreaColor` | `Color` | Color of the slider area in timeline | `Colors.yellow` |
+| `title` | `String` | Title displayed on the editor page | `'Video Editor'` |
+| `titleStyle` | `TextStyle?` | Text style for the title | `null` |
+| `primaryColor` | `Color` | Primary color for UI elements | `Color(0xFF6A11CB)` |
+| `backgroundColor` | `Color` | Background color of the editor | `Color(0xFF2C3E50)` |
+| `videoBackgroundColor` | `Color` | Background behind the media player | `Color(0xFF1E2430)` |
+| `saveButtonWidget` | `Widget?` | Custom save button widget | `null` |
+| `saveButtonText` | `String` | Text for the save button | `'Save'` |
+| `saveButtonTextColor` | `Color` | Color of save button text | `Colors.white` |
+| `thumbnailSize` | `int` | Base size for timeline thumbnails | `20` |
+| `thumbnailGenerateText` | `String` | Text shown while generating thumbnails | `'Generating thumbnails...'` |
+| `aspectRatio` | `double?` | Force specific aspect ratio for video | `null` (original ratio) |
+| `leadingWidget` | `Widget?` | Custom leading widget (back button) | `null` |
+| `timelineMargin` | `EdgeInsets` | Margin around the timeline | `EdgeInsets.symmetric(horizontal: 16)` |
+| `strings` | `AzulEditorStrings` | Localized UI strings (i18n) | `AzulEditorStrings()` (English) |
+| `saveSubfolder` | `String?` | Subfolder for organizing saved files | `null` |
+
+## Save Workflow
+
+The library uses a temp file workflow for maximum flexibility:
+
+1. **User edits media** in the editor
+2. **Library exports** to temp file with format: `yyyyMMdd_temp.ext`
+   - Audio: Saved to `Music/` (or `Music/subfolder` if specified)
+   - Video: Saved to `Movies/` (or `Movies/subfolder` if specified)
+   - iOS: Saved to `Documents/` (or `Documents/subfolder` if specified)
+3. **Library returns** the temp file path in the result Map
+4. **Your app decides** what to do:
+   - Show save dialog to get filename from user
+   - Rename the temp file
+   - Move it to a different location
+   - Upload it
+   - Delete it if user cancels
+
+### Example Save Dialog Implementation
+
+```dart
+Future<String?> _showSaveDialog(String tempFilePath) async {
+  final extension = path.extension(tempFilePath);
+  final filename = await showDialog<String>(
+    context: context,
+    builder: (context) => SaveFilenameDialog(
+      suggestedFilename: 'my_media',
+      fileExtension: extension,
+    ),
+  );
+
+  if (filename == null) {
+    // User cancelled - delete temp file
+    await File(tempFilePath).delete();
+    return null;
+  }
+
+  // Rename temp file to user's chosen name
+  final directory = path.dirname(tempFilePath);
+  final finalPath = path.join(directory, '$filename$extension');
+
+  return finalPath;
+}
+```
+
+## Complete Example
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:azul_video_editor/azul_video_editor.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:io';
+import 'package:path/path.dart' as path;
+
+class MediaEditorScreen extends StatefulWidget {
+  @override
+  _MediaEditorScreenState createState() => _MediaEditorScreenState();
+}
+
+class _MediaEditorScreenState extends State<MediaEditorScreen> {
+  String? _editedMediaPath;
+  String? _errorMessage;
+
+  Future<void> _openEditor() async {
+    // Pick media file
+    final pickedFile = await _pickMediaFile();
+    if (pickedFile == null) return;
+
+    // Configure editor
+    final options = AzulEditorOptions(
+      maxDurationMs: 30000,
+      title: 'Media Editor',
+      primaryColor: Colors.purple,
+      saveSubfolder: 'myapp',
+      strings: AzulEditorStrings(
+        playMenuLabel: 'play',
+        actionsSave: 'Save Selection',
+      ),
+    );
+
+    // Open editor
+    final result = await AzulVideoEditor.openEditor(
+      context,
+      pickedFile,
+      options: options,
+    );
+
+    // Handle result
+    if (result != null) {
+      await _handleEditorResult(result, pickedFile);
+    }
+  }
+
+  Future<File?> _pickMediaFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: [
+        'mp4', 'mov', 'avi', 'mkv',
+        'mp3', 'wav', 'aac', 'flac',
+      ],
+    );
+
+    if (result != null && result.files.single.path != null) {
+      return File(result.files.single.path!);
+    }
+    return null;
+  }
+
+  Future<void> _handleEditorResult(
+    Map<String, String> result,
+    File originalFile,
+  ) async {
+    if (result['success'] == 'true') {
+      final tempFilePath = result['path']!;
+      final originalName = path.basenameWithoutExtension(originalFile.path);
+
+      // Show save dialog
+      final finalPath = await _showSaveDialog(tempFilePath, originalName);
+
+      if (finalPath != null) {
+        setState(() {
+          _editedMediaPath = finalPath;
+          _errorMessage = null;
+        });
+      } else {
+        // User cancelled - delete temp file
+        await File(tempFilePath).delete();
+      }
+    } else {
+      setState(() {
+        _errorMessage = result['error'];
+        _editedMediaPath = null;
+      });
+    }
+  }
+
+  Future<String?> _showSaveDialog(String tempFilePath, String suggestedName) async {
+    final extension = path.extension(tempFilePath);
+    // Show your custom dialog here
+    // Return final path or null if cancelled
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('Media Editor Example')),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ElevatedButton(
+              onPressed: _openEditor,
+              child: Text('Open Media Editor'),
+            ),
+            if (_errorMessage != null) ...[
+              SizedBox(height: 20),
+              Text('Error: $_errorMessage', style: TextStyle(color: Colors.red)),
+            ],
+            if (_editedMediaPath != null) ...[
+              SizedBox(height: 20),
+              Text('Saved to: $_editedMediaPath'),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+```
 
 ## Example
 
-Check the `example/` folder for a sample Flutter app demonstrating how to integrate Azul Video Editor. To run the example:
+Check the `example/` folder for a complete Flutter app demonstrating how to integrate Azul Video Editor with save dialogs, error handling, and file management. To run the example:
 
 ```bash
 cd example
@@ -238,21 +589,22 @@ flutter run
 
 ## Contributing
 
-Contributions are welcome! Please submit issues or pull requests to the [GitHub repository](https://github.com/azulmouad/azul_video_editor).
+Contributions are welcome! Please submit issues or pull requests to the [GitHub repository](https://github.com/BenjaminKobjolke/azul_video_and_audio_editor).
 
 ## License
 
-This package is licensed under the [MIT License](https://github.com/azulmouad/azul_video_editor/blob/main/LICENSE).
+This package is licensed under the [MIT License](https://github.com/BenjaminKobjolke/azul_video_and_audio_editor/blob/main/LICENSE).
 
 ---
 
-## 📧 Author
+## 📧 Authors
 
-Created by [Mouad Zizi](https://github.com/azulmouad).
+- Fork maintained by [Benjamin Kobjolke](https://github.com/BenjaminKobjolke)
+- Originally created by [Mouad Zizi](https://github.com/azulmouad)
 
 ## ⭐ Show Your Support
 
-If you find Azul Video Editor helpful, please give it a ⭐ on [GitHub](https://github.com/azulmouad/azul_video_editor)! Your support helps others discover the package and encourages ongoing development.
+If you find Azul Video Editor helpful, please give it a ⭐ on [GitHub](https://github.com/BenjaminKobjolke/azul_video_and_audio_editor)! Your support helps others discover the package and encourages ongoing development.
 
 ## Acknowledgments
 

@@ -9,9 +9,7 @@ import 'models/media_controller.dart';
 import 'controllers/video_media_controller.dart';
 import 'controllers/audio_media_controller.dart';
 import 'generators/visual_data_generator.dart';
-import 'generators/video_thumbnail_generator.dart';
 import 'generators/audio_waveform_generator.dart';
-import 'widgets/media_timeline.dart';
 import 'widgets/media_player_widget.dart';
 import 'services/metadata_service.dart';
 import 'package:path/path.dart' as path;
@@ -43,6 +41,19 @@ class AzulVideoEditor extends StatefulWidget {
     File file, {
     AzulEditorOptions options = const AzulEditorOptions(),
   }) async {
+    // Validate file type before opening editor
+    final mediaType = MediaTypeDetector.detectFromFile(file);
+
+    if (mediaType == MediaType.unknown) {
+      // Return error for unsupported file types
+      return {
+        'success': 'false',
+        'path': '',
+        'error': 'Unsupported file format. Please select a video or audio file.',
+        'logFilePath': '',
+      };
+    }
+
     final result = await Navigator.of(context).push<Map<String, String>>(
       MaterialPageRoute(
         builder:
@@ -75,27 +86,15 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
   late double endMs;
   double videoDurationMs = 0;
 
-  List<Uint8List>? thumbnailsData;
-  bool generatingThumbnails = false;
-
-  final ScrollController _timelineScrollController = ScrollController();
-  double _viewportWidth = 0;
-  double _thumbnailTotalWidth = 0;
-  double _scrollPosition = 0;
-  Timer? _scrollEndTimer;
   Timer? _playbackPositionTimer; // Timer to update playback position
 
   double _currentPlaybackPositionMs = 0;
   double? _touchedPositionMs; // Position where user tapped on waveform
-  double _audioZoomLevel = 1.0; // Zoom level for audio waveform
-  double? _audioTargetScrollOffsetMs; // Target scroll position for audio waveform (set by Zoom Selection/All)
+  double _mediaZoomLevel = 1.0; // Zoom level for waveform visualization
+  double? _mediaTargetScrollOffsetMs; // Target scroll position for waveform (set by Zoom Selection/All)
   bool _isLoopingSelection = false; // Whether selection is playing in loop mode
   bool _bypassEndMarkerCheck = false; // Bypass end marker check when playing from position beyond end marker
 
-  // Helper to get effective timeline width (with fallback before thumbnails load)
-  double get _effectiveTimelineWidth {
-    return _thumbnailTotalWidth > 0 ? _thumbnailTotalWidth : 800.0;
-  }
 
   @override
   void initState() {
@@ -113,8 +112,6 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
   @override
   void dispose() {
     mediaController?.dispose();
-    _timelineScrollController.dispose();
-    _scrollEndTimer?.cancel();
     _playbackPositionTimer?.cancel();
     super.dispose();
   }
@@ -137,7 +134,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
       // Create appropriate media controller based on media type
       if (mediaType == MediaType.video) {
         mediaController = VideoMediaController();
-        visualGenerator = VideoThumbnailGenerator();
+        // Video waveform is extracted in controller, no generator needed
       } else if (mediaType == MediaType.audio) {
         // Initialize audio controller and waveform generator
         mediaController = AudioMediaController();
@@ -160,14 +157,21 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
       mediaController!.addListener(_updatePlaybackPosition);
       mediaController!.addListener(_checkMediaEnd);
 
-      _timelineScrollController.addListener(_onTimelineScroll);
-
       setState(() {
         isInitialized = true;
         _currentPlaybackPositionMs = 0;
       });
 
-      await _generateVisualData();
+      // For audio files, generate waveform data
+      // For video files, waveform is extracted during controller initialization
+      if (mediaType == MediaType.audio) {
+        await _generateVisualData();
+      } else {
+        // Video is ready - just update status
+        setState(() {
+          _status = widget.options.strings.statusReadyToEdit;
+        });
+      }
     } catch (e) {
       setState(() {
         _status = '${widget.options.strings.statusErrorInitializing} $e';
@@ -227,43 +231,6 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
     }
   }
 
-  void _onTimelineScroll() {
-    _scrollEndTimer?.cancel();
-    setState(() {
-      _scrollPosition = _timelineScrollController.offset;
-    });
-    _scrollEndTimer = Timer(const Duration(milliseconds: 200), _onScrollEnd);
-  }
-
-  void _onScrollEnd() {
-    if (mediaController == null ||
-        !mediaController!.isInitialized ||
-        _viewportWidth <= 0 ||
-        _thumbnailTotalWidth <= 0) {
-      return;
-    }
-
-    // Calculate the scroll ratio
-    double videoPositionRatio =
-        _scrollPosition /
-        math.max(1.0, (_thumbnailTotalWidth - _viewportWidth));
-
-    // Calculate the new seek position
-    double seekPositionMs =
-        videoPositionRatio * (videoDurationMs - (endMs - startMs));
-
-    // Adjust segment position while maintaining segment length
-    double segmentLength = endMs - startMs;
-
-    setState(() {
-      startMs = math.max(0, seekPositionMs);
-      endMs = math.min(startMs + segmentLength, videoDurationMs);
-
-      // Seek media to new start position
-      mediaController?.seekTo(startMs.toInt());
-    });
-  }
-
   void _seekToStartMarker() {
     if (mediaController != null &&
         mediaController!.isInitialized) {
@@ -274,78 +241,18 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
     }
   }
 
-  void _updateSegmentPosition(DragUpdateDetails details) {
-    // Allow dragging even before thumbnails load
-    // Calculate the drag delta in milliseconds
-    double dragDeltaMs =
-        (details.delta.dx / _effectiveTimelineWidth) * videoDurationMs;
-
-    setState(() {
-      // Move both start and end markers together
-      double newStartMs = startMs + dragDeltaMs;
-      double newEndMs = endMs + dragDeltaMs;
-
-      // Ensure segment stays within video duration
-      if (newStartMs >= 0 && newEndMs <= videoDurationMs) {
-        startMs = newStartMs;
-        endMs = newEndMs;
-
-        // Seek video to new start position
-        _seekToStartMarker();
-      }
-    });
-  }
-
-  void _handleStartMarkerDrag(DragUpdateDetails details) {
-    // Allow dragging even before thumbnails load
-    // Calculate new start position
-    double dragDeltaMs =
-        (details.delta.dx / _effectiveTimelineWidth) * videoDurationMs;
-    double newStartMs = startMs + dragDeltaMs;
-
-    // Ensure start marker doesn't go below 0 or cross end marker
-    if (newStartMs >= 0 && newStartMs < endMs) {
-      setState(() {
-        startMs = newStartMs;
-        _seekToStartMarker();
-      });
-    }
-  }
-
-  void _handleEndMarkerDrag(DragUpdateDetails details) {
-    // Allow dragging even before thumbnails load
-    // Calculate new end position
-    double dragDeltaMs =
-        (details.delta.dx / _effectiveTimelineWidth) * videoDurationMs;
-    double newEndMs = endMs + dragDeltaMs;
-
-    // Ensure end marker doesn't exceed video duration or go below start marker
-    if (newEndMs <= videoDurationMs &&
-        newEndMs > startMs &&
-        newEndMs - startMs <= widget.options.maxDurationMs) {
-      setState(() {
-        endMs = newEndMs;
-      });
-    }
-  }
-
-  // Timeline control button methods
-  void _moveStartToBeginning() {
-    setState(() {
-      startMs = 0;
-    });
-  }
-
-  void _moveEndToFinish() {
-    setState(() {
-      endMs = videoDurationMs;
-    });
-  }
-
   void _onWaveformTouched(double positionMs) {
     setState(() {
       _touchedPositionMs = positionMs.clamp(0.0, videoDurationMs);
     });
+
+    // Seek video/audio to touched position for preview
+    if (mediaController != null && mediaController!.isInitialized) {
+      mediaController!.seekTo(_touchedPositionMs!.toInt());
+      setState(() {
+        _currentPlaybackPositionMs = _touchedPositionMs!;
+      });
+    }
   }
 
   void _setStartToTouchedPosition() {
@@ -368,39 +275,12 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
     if (videoDurationMs <= 0) return;
 
     setState(() {
-      // For audio: zoom the waveform view
-      if (mediaType == MediaType.audio) {
-        // Calculate zoom level based on target duration
-        // Full file = 1.0x zoom, smaller durations = higher zoom
-        if (targetDurationMs >= videoDurationMs) {
-          _audioZoomLevel = 1.0;
-        } else {
-          _audioZoomLevel = (videoDurationMs / targetDurationMs).clamp(1.0, 10.0);
-        }
+      // Zoom the waveform view for both video and audio
+      // Full file = 1.0x zoom, smaller durations = higher zoom
+      if (targetDurationMs >= videoDurationMs) {
+        _mediaZoomLevel = 1.0;
       } else {
-        // For video: set selection range (existing behavior)
-        if (targetDurationMs >= videoDurationMs) {
-          startMs = 0;
-          endMs = videoDurationMs;
-        } else {
-          // Center the selection around current midpoint
-          final midpoint = (startMs + endMs) / 2;
-          double newStartMs = midpoint - (targetDurationMs / 2);
-          double newEndMs = midpoint + (targetDurationMs / 2);
-
-          // Adjust if we go out of bounds
-          if (newStartMs < 0) {
-            newStartMs = 0;
-            newEndMs = math.min(targetDurationMs, videoDurationMs);
-          } else if (newEndMs > videoDurationMs) {
-            endMs = videoDurationMs;
-            newStartMs = math.max(0, videoDurationMs - targetDurationMs);
-          }
-
-          startMs = newStartMs;
-          endMs = newEndMs;
-        }
-        _seekToStartMarker();
+        _mediaZoomLevel = (videoDurationMs / targetDurationMs).clamp(1.0, 10.0);
       }
     });
   }
@@ -410,30 +290,30 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
     setState(() {
       // Zoom to fit the selected region
       final selectionDuration = endMs - startMs;
-      _audioZoomLevel = (videoDurationMs / selectionDuration).clamp(1.0, 10.0);
+      _mediaZoomLevel = (videoDurationMs / selectionDuration).clamp(1.0, 10.0);
 
       // Calculate scroll offset to show the selected region
       // Center the selection in the viewport
       final selectionMidpoint = (startMs + endMs) / 2;
-      final visibleDuration = videoDurationMs / _audioZoomLevel;
+      final visibleDuration = videoDurationMs / _mediaZoomLevel;
       final targetScrollOffset = selectionMidpoint - (visibleDuration / 2);
 
       // Clamp to valid range
       final maxScrollOffset = videoDurationMs - visibleDuration;
-      _audioTargetScrollOffsetMs = targetScrollOffset.clamp(0.0, math.max(0, maxScrollOffset));
+      _mediaTargetScrollOffsetMs = targetScrollOffset.clamp(0.0, math.max(0, maxScrollOffset));
     });
   }
 
   void _zoomToAll() {
     setState(() {
-      _audioZoomLevel = 1.0; // Show entire audio file
-      _audioTargetScrollOffsetMs = 0.0; // Reset scroll to beginning
+      _mediaZoomLevel = 1.0; // Show entire file
+      _mediaTargetScrollOffsetMs = 0.0; // Reset scroll to beginning
     });
   }
 
-  void _onAudioZoomChanged(double newZoom) {
+  void _onMediaZoomChanged(double newZoom) {
     setState(() {
-      _audioZoomLevel = newZoom;
+      _mediaZoomLevel = newZoom;
     });
   }
 
@@ -450,13 +330,11 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
   }
 
   Future<void> _generateVisualData() async {
+    // Only used for audio files now (video waveform extracted in controller)
     if (mediaFile == null || visualGenerator == null) return;
 
     setState(() {
-      _status = mediaType == MediaType.video
-          ? widget.options.strings.statusGeneratingThumbnails
-          : widget.options.strings.statusGeneratingWaveforms;
-      generatingThumbnails = true;
+      _status = widget.options.strings.statusGeneratingWaveforms;
     });
 
     try {
@@ -475,16 +353,12 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
 
       if (mounted) {
         setState(() {
-          thumbnailsData = visualData;
-          _thumbnailTotalWidth = visualData.length * visualGenerator!.segmentWidth;
-          generatingThumbnails = false;
           _status = widget.options.strings.statusReadyToEdit;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          generatingThumbnails = false;
           _status = '${widget.options.strings.statusErrorGenerating} $e';
         });
       }
@@ -524,11 +398,31 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
             final musicDir = Directory('$basePath/Music');
             if (await musicDir.exists()) {
               saveDirectory = musicDir;
+
+              // Apply subfolder if specified
+              if (widget.options.saveSubfolder != null && widget.options.saveSubfolder!.isNotEmpty) {
+                saveDirectory = Directory(path.join(saveDirectory.path, widget.options.saveSubfolder!));
+
+                // Create subfolder if it doesn't exist
+                if (!await saveDirectory.exists()) {
+                  await saveDirectory.create(recursive: true);
+                }
+              }
             } else {
               // Fall back to Downloads
               final downloadsDir = Directory('$basePath/Download');
               if (await downloadsDir.exists()) {
                 saveDirectory = downloadsDir;
+
+                // Apply subfolder if specified
+                if (widget.options.saveSubfolder != null && widget.options.saveSubfolder!.isNotEmpty) {
+                  saveDirectory = Directory(path.join(saveDirectory.path, widget.options.saveSubfolder!));
+
+                  // Create subfolder if it doesn't exist
+                  if (!await saveDirectory.exists()) {
+                    await saveDirectory.create(recursive: true);
+                  }
+                }
               }
             }
           } else {
@@ -536,11 +430,31 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
             final moviesDir = Directory('$basePath/Movies');
             if (await moviesDir.exists()) {
               saveDirectory = moviesDir;
+
+              // Apply subfolder if specified
+              if (widget.options.saveSubfolder != null && widget.options.saveSubfolder!.isNotEmpty) {
+                saveDirectory = Directory(path.join(saveDirectory.path, widget.options.saveSubfolder!));
+
+                // Create subfolder if it doesn't exist
+                if (!await saveDirectory.exists()) {
+                  await saveDirectory.create(recursive: true);
+                }
+              }
             } else {
               // Fall back to Downloads
               final downloadsDir = Directory('$basePath/Download');
               if (await downloadsDir.exists()) {
                 saveDirectory = downloadsDir;
+
+                // Apply subfolder if specified
+                if (widget.options.saveSubfolder != null && widget.options.saveSubfolder!.isNotEmpty) {
+                  saveDirectory = Directory(path.join(saveDirectory.path, widget.options.saveSubfolder!));
+
+                  // Create subfolder if it doesn't exist
+                  if (!await saveDirectory.exists()) {
+                    await saveDirectory.create(recursive: true);
+                  }
+                }
               }
             }
           }
@@ -549,6 +463,16 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
     } else {
       // For iOS, use documents directory
       saveDirectory = await getApplicationDocumentsDirectory();
+
+      // Apply subfolder if specified
+      if (widget.options.saveSubfolder != null && widget.options.saveSubfolder!.isNotEmpty) {
+        saveDirectory = Directory(path.join(saveDirectory.path, widget.options.saveSubfolder!));
+
+        // Create subfolder if it doesn't exist
+        if (!await saveDirectory.exists()) {
+          await saveDirectory.create(recursive: true);
+        }
+      }
     }
 
     // Fall back to original directory if we couldn't get a save directory
@@ -801,6 +725,178 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
     }
   }
 
+  Future<void> _saveCurrentFrame() async {
+    // Only works for video files
+    if (mediaType != MediaType.video || mediaFile == null) return;
+
+    // Pause playback if playing
+    if (mediaController?.isPlaying == true) {
+      await mediaController?.pause();
+      setState(() {
+        isPlaying = false;
+      });
+    }
+
+    // Get save directory (use Pictures for images on Android)
+    Directory? saveDirectory;
+    if (Platform.isAndroid) {
+      saveDirectory = await getExternalStorageDirectory();
+      if (saveDirectory != null) {
+        final pathSegments = saveDirectory.path.split('/');
+        final baseIndex = pathSegments.indexOf('Android');
+        if (baseIndex > 0) {
+          final basePath = pathSegments.sublist(0, baseIndex).join('/');
+          final picturesDir = Directory('$basePath/Pictures');
+          if (await picturesDir.exists()) {
+            saveDirectory = picturesDir;
+
+            // Apply subfolder if specified
+            if (widget.options.saveSubfolder != null && widget.options.saveSubfolder!.isNotEmpty) {
+              saveDirectory = Directory(path.join(saveDirectory.path, widget.options.saveSubfolder!));
+              if (!await saveDirectory.exists()) {
+                await saveDirectory.create(recursive: true);
+              }
+            }
+          }
+        }
+      }
+    } else {
+      // iOS
+      saveDirectory = await getApplicationDocumentsDirectory();
+      if (widget.options.saveSubfolder != null && widget.options.saveSubfolder!.isNotEmpty) {
+        saveDirectory = Directory(path.join(saveDirectory.path, widget.options.saveSubfolder!));
+        if (!await saveDirectory.exists()) {
+          await saveDirectory.create(recursive: true);
+        }
+      }
+    }
+
+    final targetDirectory = saveDirectory?.path ?? path.dirname(mediaFile!.path);
+
+    // Generate temp filename: yyyyMMdd_frame_temp.jpg
+    final now = DateTime.now();
+    final dateStr = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+    final tempFilename = '${dateStr}_frame_temp.jpg';
+    final outputPath = path.join(targetDirectory, tempFilename);
+
+    // Set saving state
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      // Convert current position to seconds
+      final currentSeconds = (_currentPlaybackPositionMs / 1000.0).toStringAsFixed(3);
+
+      final documentsDir = await getApplicationDocumentsDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final logFile = File(path.join(documentsDir.path, 'ffmpeg_frame_log_$timestamp.txt'));
+
+      String allLogs = '';
+      bool success = false;
+
+      // TIER 1: Try with hardware decoding (default)
+      print('[Frame Export] Attempt 1: Hardware decoding');
+      final hardwareCommand = '-y -ss $currentSeconds -i "${mediaFile!.path}" -vframes 1 -q:v 2 "$outputPath"';
+      print('[Frame Export] Command: $hardwareCommand');
+
+      var session = await FFmpegKit.execute(hardwareCommand);
+      var returnCode = await session.getReturnCode();
+
+      // Get logs
+      var logs = await session.getLogs();
+      if (logs != null && logs.isNotEmpty) {
+        allLogs = logs.map((log) => log.getMessage()).join('\n');
+      }
+
+      // Check success
+      var outputFile = File(outputPath);
+      var fileExists = await outputFile.exists();
+      var fileSize = fileExists ? await outputFile.length() : 0;
+      success = ReturnCode.isSuccess(returnCode) && fileExists && fileSize > 0;
+
+      // TIER 2: If hardware failed, try software decoding
+      if (!success) {
+        print('[Frame Export] Hardware decoding failed, attempting software decoding...');
+
+        // Delete any partial output file from first attempt
+        if (await outputFile.exists()) {
+          await outputFile.delete();
+        }
+
+        final softwareCommand = '-hwaccel none -y -ss $currentSeconds -i "${mediaFile!.path}" -vframes 1 -q:v 2 "$outputPath"';
+        print('[Frame Export] Command: $softwareCommand');
+
+        session = await FFmpegKit.execute(softwareCommand);
+        returnCode = await session.getReturnCode();
+
+        // Get logs from second attempt
+        logs = await session.getLogs();
+        String softwareLogs = '';
+        if (logs != null && logs.isNotEmpty) {
+          softwareLogs = logs.map((log) => log.getMessage()).join('\n');
+        }
+
+        // Append to all logs
+        allLogs += '\n\n=== SOFTWARE DECODER ATTEMPT ===\n' + softwareLogs;
+
+        // Check success
+        outputFile = File(outputPath);
+        fileExists = await outputFile.exists();
+        fileSize = fileExists ? await outputFile.length() : 0;
+        success = ReturnCode.isSuccess(returnCode) && fileExists && fileSize > 0;
+      }
+
+      // Write all logs to file
+      await logFile.writeAsString(allLogs);
+
+      if (!mounted) return;
+
+      setState(() {
+        _isSaving = false;
+      });
+
+      // TIER 3: If both failed, provide helpful error message
+      String errorMessage = 'Failed to extract frame';
+      if (!success) {
+        // Detect AV1-specific errors
+        if (allLogs.contains('av1') &&
+            (allLogs.contains('Failed to get pixel format') ||
+             allLogs.contains('not support') ||
+             allLogs.contains('Function not implemented'))) {
+          errorMessage = widget.options.strings.errorAV1NotSupported;
+        } else if (!ReturnCode.isSuccess(returnCode)) {
+          errorMessage = '${widget.options.strings.errorFFmpegFailed} $returnCode';
+        } else if (!fileExists) {
+          errorMessage = 'Output file was not created';
+        } else if (fileSize == 0) {
+          errorMessage = widget.options.strings.errorOutputEmpty;
+        }
+      }
+
+      // Return result
+      Navigator.of(context).pop<Map<String, String>>({
+        'success': success ? 'true' : 'false',
+        'path': success ? outputPath : '',
+        'error': success ? '' : errorMessage,
+        'logFilePath': logFile.path,
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isSaving = false;
+      });
+
+      Navigator.of(context).pop<Map<String, String>>({
+        'success': 'false',
+        'path': '',
+        'error': 'Error saving frame: $e',
+        'logFilePath': '',
+      });
+    }
+  }
+
   void _togglePlayPause() {
     if (mediaController == null ||
         !mediaController!.isInitialized) {
@@ -869,6 +965,27 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
     _startPlaybackPositionTimer();
   }
 
+  void _togglePlayPauseFromMenu() async {
+    if (mediaController == null || !mediaController!.isInitialized) return;
+
+    if (isPlaying) {
+      // Currently playing - pause it
+      await mediaController!.pause();
+      setState(() {
+        isPlaying = false;
+        _isLoopingSelection = false;
+      });
+      _stopPlaybackPositionTimer();
+    } else {
+      // Currently paused - resume from current position
+      await mediaController!.play();
+      setState(() {
+        isPlaying = true;
+      });
+      _startPlaybackPositionTimer();
+    }
+  }
+
   void _stopPlayback() async {
     if (mediaController == null || !mediaController!.isInitialized) return;
 
@@ -885,60 +1002,6 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
     _stopPlaybackPositionTimer();
   }
 
-  Widget _buildZoomButton(String label, double durationMs) {
-    final isActive = mediaType == MediaType.audio
-        ? (_audioZoomLevel - (videoDurationMs / durationMs)).abs() < 0.1
-        : (endMs - startMs - durationMs).abs() < 100; // Within 100ms tolerance
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: ElevatedButton(
-        onPressed: () => _setZoomDuration(durationMs),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: isActive
-              ? widget.options.slideAreaColor
-              : widget.options.primaryColor.withOpacity(0.7),
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          minimumSize: const Size(0, 42),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTextControl(String label, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPipeSeparator() {
-    return Text(
-      '|',
-      style: TextStyle(
-        color: widget.options.primaryColor.withOpacity(0.4),
-        fontSize: 16,
-      ),
-    );
-  }
 
   Widget _buildPlayMenuButton() {
     return PopupMenuButton<String>(
@@ -953,6 +1016,9 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
           case 'from_here':
             _playFromPosition();
             break;
+          case 'toggle_play_pause':
+            _togglePlayPauseFromMenu();
+            break;
           case 'stop':
             _stopPlayback();
             break;
@@ -962,6 +1028,10 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
         PopupMenuItem(value: 'all', child: Text(widget.options.strings.playAll)),
         PopupMenuItem(value: 'selection', child: Text(widget.options.strings.playSelection)),
         PopupMenuItem(value: 'from_here', child: Text(widget.options.strings.playFromHere)),
+        PopupMenuItem(
+          value: 'toggle_play_pause',
+          child: Text(isPlaying ? widget.options.strings.playPause : widget.options.strings.playResume),
+        ),
         PopupMenuItem(value: 'stop', child: Text(widget.options.strings.playStop)),
       ],
       child: ElevatedButton.icon(
@@ -1058,6 +1128,39 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
     );
   }
 
+  Widget _buildActionsMenuButton() {
+    return PopupMenuButton<String>(
+      onSelected: (value) {
+        switch (value) {
+          case 'save':
+            _saveMedia();
+            break;
+          case 'save_frame':
+            _saveCurrentFrame();
+            break;
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(value: 'save', child: Text(widget.options.strings.actionsSave)),
+        // Save Frame temporarily disabled (AV1 compatibility issues)
+        // if (mediaType == MediaType.video)
+        //   PopupMenuItem(value: 'save_frame', child: Text(widget.options.strings.actionsSaveFrame)),
+      ],
+      child: ElevatedButton.icon(
+        onPressed: null, // PopupMenuButton handles tap
+        icon: const Icon(Icons.more_horiz, size: 20),
+        label: Text(widget.options.strings.actionsMenuLabel),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: widget.options.primaryColor,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: widget.options.primaryColor,
+          disabledForegroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1085,15 +1188,6 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
                 color: Colors.white,
               ),
             ),
-        actions: [
-          if (mediaFile != null && isInitialized && !_isSaving)
-            widget.options.saveButtonWidget ??
-                IconButton(
-                  icon: const Icon(Icons.save, color: Colors.white),
-                  onPressed: _saveMedia,
-                  tooltip: widget.options.saveButtonText,
-                ),
-        ],
       ),
       body: Stack(
         children: [
@@ -1115,9 +1209,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
                       ),
                       const SizedBox(height: 20),
                       Text(
-                        mediaType == MediaType.audio
-                            ? widget.options.strings.savingAudio
-                            : widget.options.strings.savingVideo,
+                        widget.options.strings.exportingMedia,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 18,
@@ -1159,13 +1251,13 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
                     currentPositionMs: _currentPlaybackPositionMs,
                     touchedPositionMs: _touchedPositionMs,
                     onWaveformTouched: _onWaveformTouched,
-                    audioZoomLevel: _audioZoomLevel,
-                    audioTargetScrollOffsetMs: _audioTargetScrollOffsetMs,
+                    audioZoomLevel: _mediaZoomLevel,
+                    audioTargetScrollOffsetMs: _mediaTargetScrollOffsetMs,
                     onAudioScrollChanged: (scrollOffset) {
                       // Optional: Track user's manual scroll position if needed
                       // For now, we don't need to do anything here
                     },
-                    onAudioZoomChanged: _onAudioZoomChanged,
+                    onAudioZoomChanged: _onMediaZoomChanged,
                   )
                 : const Center(child: CircularProgressIndicator()),
           ),
@@ -1196,100 +1288,30 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
           const SizedBox(height: 5),
         ],
 
-        // Audio Controls - Menu Button Style
-        if (mediaType == MediaType.audio && isInitialized) ...[
+        // Unified Controls - Menu Button Style (for both video and audio)
+        if (isInitialized) ...[
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                Expanded(child: _buildPlayMenuButton()),
-                const SizedBox(width: 8),
-                Expanded(child: _buildZoomMenuButton()),
-                const SizedBox(width: 8),
-                Expanded(child: _buildMarkerMenuButton()),
-              ],
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    SizedBox(width: 120, child: _buildPlayMenuButton()),
+                    const SizedBox(width: 8),
+                    SizedBox(width: 120, child: _buildZoomMenuButton()),
+                    const SizedBox(width: 8),
+                    SizedBox(width: 120, child: _buildMarkerMenuButton()),
+                    const SizedBox(width: 8),
+                    SizedBox(width: 120, child: _buildActionsMenuButton()),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
-
-        // Timeline Control Buttons (hide for audio files)
-        if (isInitialized && mediaType != MediaType.audio) ...[
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                // Position controls
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _moveStartToBeginning,
-                    icon: const Icon(Icons.skip_previous, size: 24),
-                    label: const Text('Start', style: TextStyle(fontSize: 16)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: widget.options.primaryColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      minimumSize: const Size(0, 52),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _moveEndToFinish,
-                    icon: const Icon(Icons.skip_next, size: 24),
-                    label: const Text('End', style: TextStyle(fontSize: 16)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: widget.options.primaryColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      minimumSize: const Size(0, 52),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                const Text(
-                  'Zoom:',
-                  style: TextStyle(color: Colors.white70, fontSize: 14),
-                ),
-                const SizedBox(width: 8),
-                Expanded(child: _buildZoomButton('1s', 1000)),
-                Expanded(child: _buildZoomButton('10s', 10000)),
-                Expanded(child: _buildZoomButton('60s', 60000)),
-                Expanded(child: _buildZoomButton('Full', videoDurationMs)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-
-        // Timeline with Thumbnails/Waveforms and Selection Markers (hide for audio)
-        if (mediaType != MediaType.audio)
-          MediaTimeline(
-          visualData: thumbnailsData,
-          isGenerating: generatingThumbnails,
-          generatingText: widget.options.thumbnailGenerateText,
-          videoDurationMs: videoDurationMs,
-          startMs: startMs,
-          endMs: endMs,
-          currentPlaybackPositionMs: _currentPlaybackPositionMs,
-          scrollController: _timelineScrollController,
-          scrollPosition: _scrollPosition,
-          thumbnailTotalWidth: _thumbnailTotalWidth,
-          slideAreaColor: widget.options.slideAreaColor,
-          onSegmentDrag: _updateSegmentPosition,
-          onStartMarkerDrag: _handleStartMarkerDrag,
-          onEndMarkerDrag: _handleEndMarkerDrag,
-          margin: widget.options.timelineMargin,
-          height: mediaType == MediaType.audio ? 150.0 : 100.0,
-          segmentHeight: mediaType == MediaType.audio ? 130.0 : 80.0,
-        ),
 
         // Status Display
         if (_status.startsWith('Error'))

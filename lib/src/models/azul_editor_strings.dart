@@ -22,11 +22,14 @@ class AzulEditorStrings {
   final String playMenuLabel;
   final String zoomMenuLabel;
   final String markerMenuLabel;
+  final String actionsMenuLabel;
 
   // Play menu items
   final String playAll;
   final String playSelection;
   final String playFromHere;
+  final String playPause;
+  final String playResume;
   final String playStop;
 
   // Zoom menu items
@@ -38,6 +41,10 @@ class AzulEditorStrings {
   final String markerEndToMax;
   final String markerStartAt; // "Start @ " (time will be appended)
   final String markerEndAt;   // "End @ " (time will be appended)
+
+  // Actions menu items
+  final String actionsSave;
+  final String actionsSaveFrame;
 
   // Duration display
   final String durationStart;
@@ -69,14 +76,14 @@ class AzulEditorStrings {
   final String emptyStateSelectButton;
 
   // Saving overlay
-  final String savingAudio;
-  final String savingVideo;
+  final String exportingMedia;
 
   // Error messages (internal use by library)
   final String errorInvalidDuration;
   final String errorNoLogs;
   final String errorOutputEmpty;
   final String errorFFmpegFailed;
+  final String errorAV1NotSupported;
 
   const AzulEditorStrings({
     // Default English strings
@@ -86,10 +93,13 @@ class AzulEditorStrings {
     this.playMenuLabel = 'play',
     this.zoomMenuLabel = 'zoom',
     this.markerMenuLabel = 'marker',
+    this.actionsMenuLabel = 'actions',
 
     this.playAll = 'All',
     this.playSelection = 'Selection',
     this.playFromHere = 'From Here',
+    this.playPause = 'Pause',
+    this.playResume = 'Resume',
     this.playStop = 'Stop',
 
     this.zoomSelection = 'Selection',
@@ -99,6 +109,9 @@ class AzulEditorStrings {
     this.markerEndToMax = 'End → Max',
     this.markerStartAt = 'Start @ ',
     this.markerEndAt = 'End @ ',
+
+    this.actionsSave = 'Save Selection',
+    this.actionsSaveFrame = 'Save Frame',
 
     this.durationStart = 'Start:',
     this.durationLabel = 'Duration:',
@@ -126,12 +139,12 @@ class AzulEditorStrings {
     this.emptyStateTapToSelect = 'Tap "Select Media" to get started',
     this.emptyStateSelectButton = 'Select Media',
 
-    this.savingAudio = 'Saving audio...',
-    this.savingVideo = 'Saving video...',
+    this.exportingMedia = 'Exporting media...',
 
     this.errorInvalidDuration = 'Invalid duration:',
     this.errorNoLogs = 'No logs available',
     this.errorOutputEmpty = 'Output file is empty (0 bytes). Check logs for FFmpeg errors.',
     this.errorFFmpegFailed = 'FFmpeg failed with return code:',
+    this.errorAV1NotSupported = 'Frame extraction failed. AV1 videos may not be supported on this device.',
   });
 }

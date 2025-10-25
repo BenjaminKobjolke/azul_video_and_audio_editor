@@ -4,6 +4,7 @@ import 'package:azul_video_editor/azul_video_editor.dart';
 import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'package:file_picker/file_picker.dart';
+import 'package:share_plus/share_plus.dart';
 import 'widgets/save_dialog.dart';
 import 'widgets/overwrite_dialog.dart';
 
@@ -412,11 +413,12 @@ class _HomeScreenState extends State<HomeScreen> {
         context: context,
         builder: (context) => AlertDialog(
           title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('FFmpeg Log File'),
+              const Expanded(
+                child: Text('FFmpeg Log File'),
+              ),
               IconButton(
-                icon: const Icon(Icons.copy),
+                icon: const Icon(Icons.copy, size: 20),
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: contents));
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -424,6 +426,23 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 },
                 tooltip: 'Copy to clipboard',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.share, size: 20),
+                onPressed: () async {
+                  final box = context.findRenderObject() as RenderBox?;
+                  await Share.shareXFiles(
+                    [XFile(_logFilePath!)],
+                    subject: 'FFmpeg Log File',
+                    sharePositionOrigin: box!.localToGlobal(Offset.zero) & box.size,
+                  );
+                },
+                tooltip: 'Share log file',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
               ),
             ],
           ),
