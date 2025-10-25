@@ -164,23 +164,14 @@ class _AudioWaveformVisualizerState extends State<AudioWaveformVisualizer> {
 
   // Build waveform content based on extraction state
   Widget _buildWaveformContent(Size size) {
-    // If waveform extraction failed, show empty container (still interactive for gestures)
-    if (widget.waveformExtractionFailed) {
-      return Container(
-        color: Colors.transparent,
-        width: size.width,
-        height: size.height,
-      );
-    }
-
-    // Always render CustomPaint (even with null samples) to show markers immediately
-    // Spinner shown as overlay while waveform loads
+    // Always render CustomPaint to show markers, even if waveform extraction failed
+    // WaveformPainter handles null samples gracefully (draws markers but not waveform)
     return Stack(
       children: [
         // ALWAYS use CustomPaint - WaveformPainter handles null samples gracefully
         CustomPaint(
           painter: WaveformPainter(
-            samples: widget.samples, // Can be null - painter will skip waveform but draw markers
+            samples: widget.samples, // Can be null if extraction failed - painter will skip waveform but draw markers
             startMs: widget.startMs,
             endMs: widget.endMs,
             durationMs: widget.durationMs,
@@ -197,8 +188,8 @@ class _AudioWaveformVisualizerState extends State<AudioWaveformVisualizer> {
           size: size,
         ),
 
-        // Show spinner overlay while loading (doesn't block gestures or markers)
-        if (!widget.isWaveformReady || widget.samples == null)
+        // Show spinner only while loading (hide if failed or succeeded)
+        if (!widget.isWaveformReady && !widget.waveformExtractionFailed)
           const Center(
             child: CircularProgressIndicator(),
           ),
