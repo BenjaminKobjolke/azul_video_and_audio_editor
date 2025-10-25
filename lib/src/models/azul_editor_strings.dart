@@ -72,24 +72,7 @@ class AzulEditorStrings {
   final String savingAudio;
   final String savingVideo;
 
-  // Snackbar messages
-  final String snackbarAudioSaved;
-  final String snackbarVideoSaved;
-  final String snackbarFailedAudio;
-  final String snackbarFailedMedia;
-
-  // Save dialog
-  final String saveDialogTitle;
-  final String saveDialogEnterFilename;
-  final String saveDialogHint;
-  final String saveDialogErrorEmpty;
-  final String saveDialogErrorInvalidChars;
-  final String saveDialogFileExists;
-  final String saveDialogCancel;
-  final String saveDialogOverwrite;
-  final String saveDialogSave;
-
-  // Error messages
+  // Error messages (internal use by library)
   final String errorInvalidDuration;
   final String errorNoLogs;
   final String errorOutputEmpty;
@@ -145,21 +128,6 @@ class AzulEditorStrings {
 
     this.savingAudio = 'Saving audio...',
     this.savingVideo = 'Saving video...',
-
-    this.snackbarAudioSaved = 'Audio saved:',
-    this.snackbarVideoSaved = 'Video saved:',
-    this.snackbarFailedAudio = 'Failed to save audio:',
-    this.snackbarFailedMedia = 'Failed to save media:',
-
-    this.saveDialogTitle = 'Save Media File',
-    this.saveDialogEnterFilename = 'Enter filename:',
-    this.saveDialogHint = 'Enter filename',
-    this.saveDialogErrorEmpty = 'Filename cannot be empty',
-    this.saveDialogErrorInvalidChars = 'Filename contains invalid characters',
-    this.saveDialogFileExists = 'A file with this name already exists',
-    this.saveDialogCancel = 'Cancel',
-    this.saveDialogOverwrite = 'Overwrite',
-    this.saveDialogSave = 'Save',
 
     this.errorInvalidDuration = 'Invalid duration:',
     this.errorNoLogs = 'No logs available',

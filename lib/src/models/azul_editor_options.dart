@@ -42,9 +42,6 @@ class AzulEditorOptions {
   /// Color of the save button text
   final Color saveButtonTextColor;
 
-  /// Whether to show a snackbar after saving
-  final bool showSavedSnackbar;
-
   /// Size of the thumbnails in the timeline
   final int thumbnailSize;
 
@@ -60,15 +57,6 @@ class AzulEditorOptions {
   /// Timeline Margin
   final EdgeInsets timelineMargin;
 
-  /// Default filename prefix for saved files
-  final String defaultFilenamePrefix;
-
-  /// Whether to show save dialog before exporting
-  final bool showSaveDialog;
-
-  /// Whether to allow overwriting existing files
-  final bool allowOverwrite;
-
   /// Localized strings for the editor UI
   final AzulEditorStrings strings;
 
@@ -81,7 +69,6 @@ class AzulEditorOptions {
     this.saveButtonWidget,
     this.saveButtonText = 'Save',
     this.saveButtonTextColor = Colors.white,
-    this.showSavedSnackbar = true,
     this.thumbnailSize = 20,
     this.aspectRatio,
     this.showDuration = true,
@@ -92,9 +79,6 @@ class AzulEditorOptions {
     this.titleStyle,
     this.thumbnailGenerateText = "Generating thumbnails...",
     this.timelineMargin = const EdgeInsets.symmetric(horizontal: 16),
-    this.defaultFilenamePrefix = 'edited_',
-    this.showSaveDialog = true,
-    this.allowOverwrite = true,
     this.strings = const AzulEditorStrings(),
   });
 }

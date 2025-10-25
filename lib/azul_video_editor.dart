@@ -11,6 +11,5 @@ export 'src/generators/video_thumbnail_generator.dart';
 export 'src/generators/audio_waveform_generator.dart';
 export 'src/widgets/media_timeline.dart';
 export 'src/widgets/media_player_widget.dart';
-export 'src/widgets/save_dialog.dart';
 export 'src/widgets/audio_waveform_visualizer.dart';
 export 'src/services/metadata_service.dart';

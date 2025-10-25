@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:easy_video_editor/easy_video_editor.dart';
-import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'dart:async';
 import 'dart:typed_data';
@@ -14,7 +13,6 @@ import 'generators/video_thumbnail_generator.dart';
 import 'generators/audio_waveform_generator.dart';
 import 'widgets/media_timeline.dart';
 import 'widgets/media_player_widget.dart';
-import 'widgets/save_dialog.dart';
 import 'services/metadata_service.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -29,34 +27,28 @@ class AzulVideoEditor extends StatefulWidget {
   /// Callback that returns the path of the edited video
   final Function(String path)? onVideoSaved;
 
-  /// File to edit (if null, the editor will prompt to select a file)
-  final File? initialVideoFile;
-
-  /// Whether to automatically pick a video when opening the editor
-  final bool autoPickVideo;
+  /// File to edit (required)
+  final File initialVideoFile;
 
   const AzulVideoEditor({
     Key? key,
     this.options = const AzulEditorOptions(),
     this.onVideoSaved,
-    this.initialVideoFile,
-    this.autoPickVideo = false,
+    required this.initialVideoFile,
   }) : super(key: key);
 
   /// Static method to open the editor as a page and return the edited video path and logs
   static Future<Map<String, String>?> openEditor(
-    BuildContext context, {
+    BuildContext context,
+    File file, {
     AzulEditorOptions options = const AzulEditorOptions(),
-    File? initialVideoFile,
-    bool autoPickVideo = true,
   }) async {
     final result = await Navigator.of(context).push<Map<String, String>>(
       MaterialPageRoute(
         builder:
             (context) => AzulVideoEditor(
               options: options,
-              initialVideoFile: initialVideoFile,
-              autoPickVideo: autoPickVideo,
+              initialVideoFile: file,
             ),
       ),
     );
@@ -111,16 +103,11 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
     _status = widget.options.strings.statusNoMediaSelected;
     endMs = widget.options.maxDurationMs.toDouble();
 
-    // Use the initial video file if provided
-    if (widget.initialVideoFile != null) {
-      mediaFile = widget.initialVideoFile;
+    // Initialize with the provided file
+    mediaFile = widget.initialVideoFile;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeMediaPlayer();
-    } else if (widget.autoPickVideo) {
-      // Auto pick media on init if requested
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _pickMedia();
-      });
-    }
+    });
   }
 
   @override
@@ -132,60 +119,19 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
     super.dispose();
   }
 
-  Future<void> _pickMedia() async {
-    // Support both video and audio files
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: [
-        // Video formats
-        'mp4', 'mov', 'avi', 'mkv', 'flv', 'wmv', 'webm', 'm4v', 'mpeg', 'mpg', '3gp',
-        // Audio formats
-        'mp3', 'wav', 'aac', 'flac', 'ogg', 'wma', 'm4a', 'opus', 'aiff', 'alac',
-      ],
-      allowCompression: false,
-    );
-
-    if (result != null &&
-        result.files.isNotEmpty &&
-        result.files.single.path != null) {
-      final selectedFile = File(result.files.single.path!);
-      final detectedMediaType = MediaTypeDetector.detectFromFile(selectedFile);
-
-      setState(() {
-        mediaFile = selectedFile;
-        mediaType = detectedMediaType;
-        _status = detectedMediaType == MediaType.video
-            ? widget.options.strings.statusVideoSelected
-            : detectedMediaType == MediaType.audio
-                ? widget.options.strings.statusAudioSelected
-                : widget.options.strings.statusMediaSelected;
-        isPlaying = false;
-        thumbnailsData = null;
-        isInitialized = false;
-      });
-
-      // Clean up previous controller
-      if (mediaController != null) {
-        mediaController!.removeListener(_updatePlaybackPosition);
-        mediaController!.removeListener(_checkMediaEnd);
-        await mediaController!.dispose();
-        mediaController = null;
-      }
-
-      await _initializeMediaPlayer();
-    } else {
-      // If no media was selected and we're in autoPickVideo mode,
-      // we should pop back since there's nothing to edit
-      if (widget.autoPickVideo && mediaFile == null) {
-        if (mounted) {
-          Navigator.of(context).pop();
-        }
-      }
-    }
-  }
-
   Future<void> _initializeMediaPlayer() async {
-    if (mediaFile == null || mediaType == null) return;
+    if (mediaFile == null) return;
+
+    // Detect media type from file
+    mediaType = MediaTypeDetector.detectFromFile(mediaFile!);
+
+    setState(() {
+      _status = mediaType == MediaType.video
+          ? widget.options.strings.statusVideoSelected
+          : mediaType == MediaType.audio
+              ? widget.options.strings.statusAudioSelected
+              : widget.options.strings.statusMediaSelected;
+    });
 
     try {
       // Create appropriate media controller based on media type
@@ -556,9 +502,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
       });
     }
 
-    // Get original file info
-    final originalFilename = path.basename(mediaFile!.path);
-    final filenameWithoutExt = path.basenameWithoutExtension(mediaFile!.path);
+    // Get file extension
     final extension = path.extension(mediaFile!.path);
 
     // Get appropriate save directory
@@ -610,45 +554,10 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
     // Fall back to original directory if we couldn't get a save directory
     final targetDirectory = saveDirectory?.path ?? path.dirname(mediaFile!.path);
 
-    // Generate suggested filename
-    final suggestedFilename = '${widget.options.defaultFilenamePrefix}$filenameWithoutExt$extension';
-
-    String? finalFilename = suggestedFilename;
-    bool overwrite = false;
-
-    // Show save dialog if enabled
-    if (widget.options.showSaveDialog) {
-      // Check if suggested file exists in target directory
-      final suggestedPath = path.join(targetDirectory, suggestedFilename);
-      final fileExists = await File(suggestedPath).exists();
-
-      final result = await showDialog<Map<String, dynamic>>(
-        context: context,
-        builder: (context) => SaveMediaDialog(
-          originalFilename: originalFilename,
-          suggestedFilename: suggestedFilename,
-          fileExists: fileExists,
-          strings: widget.options.strings,
-        ),
-      );
-
-      if (result == null) {
-        // User cancelled
-        return;
-      }
-
-      finalFilename = result['filename'] as String?;
-      overwrite = result['overwrite'] as bool? ?? false;
-
-      if (finalFilename == null || finalFilename.isEmpty) {
-        return;
-      }
-
-      // Add extension if missing
-      if (!finalFilename.endsWith(extension)) {
-        finalFilename = '$finalFilename$extension';
-      }
-    }
+    // Generate temp filename: yyyyMMdd_temp.ext
+    final now = DateTime.now();
+    final dateStr = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+    final tempFilename = '${dateStr}_temp$extension';
 
     // Set saving state to disable UI
     setState(() {
@@ -657,13 +566,9 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
 
     // Handle audio export with FFmpeg
     if (mediaType == MediaType.audio) {
-      setState(() {
-        _status = widget.options.strings.statusProcessingAudio;
-      });
-
       try {
-        // Build output path
-        final outputPath = path.join(targetDirectory, finalFilename);
+        // Build output path with temp filename
+        final outputPath = path.join(targetDirectory, tempFilename);
 
         // Convert milliseconds to seconds for FFmpeg
         // Round to 2 decimal places to avoid precision issues
@@ -756,10 +661,6 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
         final isSuccess = ReturnCode.isSuccess(returnCode) && fileExists && fileSize > 0;
 
         if (isSuccess) {
-          setState(() {
-            _status = '${widget.options.strings.statusAudioSaved} $outputPath (${(fileSize / 1024).toStringAsFixed(1)} KB)';
-          });
-
           // Copy metadata from original file to saved file
           try {
             print('[Audio Export] Copying metadata from original to saved file...');
@@ -777,41 +678,12 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
             // Continue even if metadata copy fails
           }
 
-          // Show success snackbar
-          if (widget.options.showSavedSnackbar) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('${widget.options.strings.snackbarAudioSaved} ${path.basename(outputPath)} (${(fileSize / 1024).toStringAsFixed(1)} KB)'),
-                backgroundColor: widget.options.primaryColor,
-              ),
-            );
-          }
-
-          // Return the path via the callback
+          // Call callback with temp file path
           if (widget.onVideoSaved != null) {
             widget.onVideoSaved!(outputPath);
           }
         } else {
-          // Failed - show detailed error
-          final errorMsg = fileSize == 0
-              ? widget.options.strings.errorOutputEmpty
-              : '${widget.options.strings.errorFFmpegFailed} $returnCode';
-
-          setState(() {
-            _status = 'Error: $errorMsg';
-          });
-
-          if (widget.options.showSavedSnackbar) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(errorMsg),
-                backgroundColor: Colors.redAccent,
-                duration: const Duration(seconds: 5),
-              ),
-            );
-          }
-
-          // Delete empty file if it exists
+          // Failed - delete empty file if it exists
           if (fileExists && fileSize == 0) {
             await outputFile.delete();
           }
@@ -822,42 +694,39 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
           _isSaving = false;
         });
 
-        // Always return to home screen with log data (success or failure)
+        // Return to caller with standardized result
+        final errorMsg = !isSuccess
+            ? (fileSize == 0
+                ? widget.options.strings.errorOutputEmpty
+                : '${widget.options.strings.errorFFmpegFailed} $returnCode')
+            : '';
+
         Navigator.of(context).pop<Map<String, String>>({
-          'path': isSuccess ? outputPath : '',
-          'logs': allLogs ?? '',
-          'logFilePath': logFile.path,
           'success': isSuccess ? 'true' : 'false',
-          'error': isSuccess ? '' : (fileSize == 0
-              ? widget.options.strings.errorOutputEmpty
-              : '${widget.options.strings.errorFFmpegFailed} $returnCode'),
+          'path': isSuccess ? outputPath : '',
+          'error': errorMsg,
+          'logFilePath': logFile.path,
         });
         return;
       } catch (e) {
         if (!mounted) return;
 
         setState(() {
-          _status = '${widget.options.strings.statusErrorSavingAudio} $e';
           _isSaving = false;
         });
 
-        if (widget.options.showSavedSnackbar) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('${widget.options.strings.snackbarFailedAudio} $e'),
-              backgroundColor: Colors.redAccent,
-            ),
-          );
-        }
+        // Return error to caller
+        Navigator.of(context).pop<Map<String, String>>({
+          'success': 'false',
+          'path': '',
+          'error': '${widget.options.strings.statusErrorSavingAudio} $e',
+          'logFilePath': '',
+        });
         return;
       }
     }
 
     // Handle video export
-    setState(() {
-      _status = widget.options.strings.statusProcessingVideo;
-    });
-
     try {
       final editor = VideoEditorBuilder(
         videoPath: mediaFile!.path,
@@ -867,47 +736,22 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
 
       if (!mounted) return;
 
-      // Move exported file to target directory with user's chosen filename
-      String? finalPath = result;
-      if (result != null && finalFilename.isNotEmpty) {
+      // Move exported file to target directory with temp filename
+      String? outputPath;
+      if (result != null) {
         final exportedFile = File(result);
         // Use target directory (Movies/Downloads on Android, Documents on iOS)
-        final newPath = path.join(targetDirectory, finalFilename);
+        outputPath = path.join(targetDirectory, tempFilename);
 
-        // Check if target file exists and handle overwrite
-        if (await File(newPath).exists()) {
-          if (overwrite || !widget.options.allowOverwrite) {
-            await File(newPath).delete();
-          } else {
-            // Generate unique filename in target directory
-            int counter = 1;
-            String uniquePath;
-            do {
-              final nameWithoutExt = path.basenameWithoutExtension(finalFilename);
-              uniquePath = path.join(targetDirectory, '${nameWithoutExt}_$counter$extension');
-              counter++;
-            } while (await File(uniquePath).exists());
-            finalPath = uniquePath;
-          }
-        }
-
-        if (finalPath == result) {
-          finalPath = newPath;
-        }
-
-        await exportedFile.copy(finalPath!);
-        await exportedFile.delete(); // Delete the temp file
+        await exportedFile.copy(outputPath);
+        await exportedFile.delete(); // Delete the original temp file from easy_video_editor
       }
 
-      setState(() {
-        _status = '${widget.options.strings.statusVideoSaved} ${finalPath ?? result ?? ''}';
-      });
-
       // Copy metadata from original file to saved file (for MP4 videos)
-      if (finalPath != null) {
+      if (outputPath != null) {
         try {
           print('[Video Export] Copying metadata from original to saved file...');
-          final savedFile = File(finalPath);
+          final savedFile = File(outputPath);
           final metadataCopied = await MetadataService.copyMetadata(
             mediaFile!,
             savedFile,
@@ -921,22 +765,10 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
           print('[Video Export] Error copying metadata: $e');
           // Continue even if metadata copy fails
         }
-      }
 
-      // Show snackbar if enabled
-      if (widget.options.showSavedSnackbar) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${widget.options.strings.snackbarVideoSaved} ${path.basename(finalPath ?? result ?? '')}'),
-            backgroundColor: widget.options.primaryColor,
-          ),
-        );
-      }
-
-      // Return the path via the callback if provided
-      if (widget.onVideoSaved != null) {
-        if (finalPath != null) {
-          widget.onVideoSaved!(finalPath);
+        // Call callback with temp file path
+        if (widget.onVideoSaved != null) {
+          widget.onVideoSaved!(outputPath);
         }
       }
 
@@ -945,27 +777,27 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
         _isSaving = false;
       });
 
-      // Return the path and logs for the static method
+      // Return standardized result to caller
       Navigator.of(context).pop<Map<String, String>>({
-        'path': finalPath ?? '',
-        'logs': '', // Video export doesn't use FFmpeg yet, so no logs
+        'success': outputPath != null ? 'true' : 'false',
+        'path': outputPath ?? '',
+        'error': outputPath == null ? 'Video export failed' : '',
+        'logFilePath': '', // Video export doesn't use FFmpeg, so no logs
       });
     } catch (e) {
       if (!mounted) return;
 
       setState(() {
-        _status = '${widget.options.strings.statusErrorSavingMedia} $e';
         _isSaving = false;
       });
 
-      if (widget.options.showSavedSnackbar) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${widget.options.strings.snackbarFailedMedia} $e'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      }
+      // Return error to caller
+      Navigator.of(context).pop<Map<String, String>>({
+        'success': 'false',
+        'path': '',
+        'error': '${widget.options.strings.statusErrorSavingMedia} $e',
+        'logFilePath': '',
+      });
     }
   }
 
@@ -1266,7 +1098,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
       body: Stack(
         children: [
           // Main editor content
-          mediaFile == null ? _buildEmptyState() : _buildMediaEditorContent(),
+          _buildMediaEditorContent(),
 
           // Fullscreen blocking overlay when saving
           if (_isSaving)
@@ -1297,52 +1129,6 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
                 ),
               ),
             ),
-        ],
-      ),
-      floatingActionButton:
-          mediaFile == null && !widget.autoPickVideo
-              ? FloatingActionButton.extended(
-                onPressed: _pickMedia,
-                icon: const Icon(Icons.video_library, color: Colors.white),
-                label: Text(
-                  widget.options.strings.emptyStateSelectButton,
-                  style: const TextStyle(color: Colors.white),
-                ),
-                backgroundColor: widget.options.primaryColor,
-              )
-              : null,
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.video_library,
-            size: 100,
-            color: widget.options.primaryColor.withOpacity(0.5),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            widget.options.strings.emptyStateTitle,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 10),
-          widget.autoPickVideo
-              ? Text(
-                widget.options.strings.emptyStateOpeningPicker,
-                style: const TextStyle(color: Colors.white54, fontSize: 16),
-              )
-              : Text(
-                widget.options.strings.emptyStateTapToSelect,
-                style: const TextStyle(color: Colors.white54, fontSize: 16),
-              ),
         ],
       ),
     );

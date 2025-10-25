@@ -21,7 +21,6 @@ dependencies:
   flutter:
     sdk: flutter
 
-  file_picker: ^10.1.1
   easy_video_editor: ^0.0.5
   video_player: ^2.9.5
   #video_thumbnail: ^0.5.3

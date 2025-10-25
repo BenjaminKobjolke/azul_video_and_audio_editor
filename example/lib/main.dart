@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:azul_video_editor/azul_video_editor.dart';
 import 'dart:io';
+import 'package:path/path.dart' as path;
+import 'package:file_picker/file_picker.dart';
+import 'widgets/save_dialog.dart';
+import 'widgets/overwrite_dialog.dart';
 
 void main() {
   runApp(const MyApp());
@@ -118,20 +122,25 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openDefaultEditor(BuildContext context) async {
-    // Default is now auto-pick = true
-    final result = await AzulVideoEditor.openEditor(context);
+    // Pick media file first
+    final pickedFile = await _pickMediaFile();
+    if (pickedFile == null) return; // User cancelled
+
+    // Open editor with the picked file
+    final result = await AzulVideoEditor.openEditor(context, pickedFile);
 
     if (result != null) {
-      setState(() {
-        _editedVideoPath = result['path'];
-        _ffmpegLogs = result['logs'];
-        _logFilePath = result['logFilePath'];
-        _errorMessage = result['error']?.isNotEmpty == true ? result['error'] : null;
-      });
+      // Get original filename for save dialog suggestion
+      final originalName = path.basenameWithoutExtension(pickedFile.path);
+      await _handleEditorResult(context, result, originalName);
     }
   }
 
   Future<void> _openCustomEditor(BuildContext context) async {
+    // Pick media file first
+    final pickedFile = await _pickMediaFile();
+    if (pickedFile == null) return; // User cancelled
+
     // Custom options
     final options = AzulEditorOptions(
       maxDurationMs: 30000, // 30 seconds
@@ -140,38 +149,210 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: Colors.black,
       videoBackgroundColor: Colors.grey[900]!,
       saveButtonText: 'Export Video',
-
       thumbnailSize: 30,
       aspectRatio: 16 / 9, // Force 16:9 aspect ratio
     );
 
-    // Still auto-picks
-    final result = await AzulVideoEditor.openEditor(context, options: options);
+    final result = await AzulVideoEditor.openEditor(context, pickedFile, options: options);
 
     if (result != null) {
-      setState(() {
-        _editedVideoPath = result['path'];
-        _ffmpegLogs = result['logs'];
-        _logFilePath = result['logFilePath'];
-        _errorMessage = result['error']?.isNotEmpty == true ? result['error'] : null;
-      });
+      // Get original filename for save dialog suggestion
+      final originalName = path.basenameWithoutExtension(pickedFile.path);
+      await _handleEditorResult(context, result, originalName);
     }
   }
 
   Future<void> _openManualPickEditor(BuildContext context) async {
-    // Set autoPickVideo to false for manual selection
-    final result = await AzulVideoEditor.openEditor(
-      context,
-      autoPickVideo: false,
-    );
+    // Pick media file first
+    final pickedFile = await _pickMediaFile();
+    if (pickedFile == null) return; // User cancelled
+
+    final result = await AzulVideoEditor.openEditor(context, pickedFile);
 
     if (result != null) {
+      // Get original filename for save dialog suggestion
+      final originalName = path.basenameWithoutExtension(pickedFile.path);
+      await _handleEditorResult(context, result, originalName);
+    }
+  }
+
+  /// Shows file picker and returns selected file
+  Future<File?> _pickMediaFile() async {
+    try {
+      // Support both video and audio files
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: [
+          // Video formats
+          'mp4', 'mov', 'avi', 'mkv', 'flv', 'wmv', 'webm', 'm4v', 'mpeg', 'mpg', '3gp',
+          // Audio formats
+          'mp3', 'wav', 'aac', 'flac', 'ogg', 'wma', 'm4a', 'opus', 'aiff', 'alac',
+        ],
+        allowCompression: false,
+      );
+
+      if (result != null &&
+          result.files.isNotEmpty &&
+          result.files.single.path != null) {
+        return File(result.files.single.path!);
+      }
+      return null;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error picking file: $e')),
+        );
+      }
+      return null;
+    }
+  }
+
+  /// Handles the result from the editor - processes temp file and shows save dialog
+  Future<void> _handleEditorResult(
+    BuildContext context,
+    Map<String, String> result,
+    String originalFilename,
+  ) async {
+    // Store log file path regardless of success/failure
+    setState(() {
+      _logFilePath = result['logFilePath'];
+    });
+
+    // Check if export was successful
+    final success = result['success'] == 'true';
+    if (!success) {
+      // Export failed - show error
       setState(() {
-        _editedVideoPath = result['path'];
-        _ffmpegLogs = result['logs'];
-        _logFilePath = result['logFilePath'];
-        _errorMessage = result['error']?.isNotEmpty == true ? result['error'] : null;
+        _errorMessage = result['error'] ?? 'Unknown error occurred';
+        _editedVideoPath = null;
       });
+      return;
+    }
+
+    // Export succeeded - get temp file path
+    final tempFilePath = result['path'];
+    if (tempFilePath == null || tempFilePath.isEmpty) {
+      setState(() {
+        _errorMessage = 'No file path returned from editor';
+        _editedVideoPath = null;
+      });
+      return;
+    }
+
+    final tempFile = File(tempFilePath);
+    if (!await tempFile.exists()) {
+      setState(() {
+        _errorMessage = 'Temp file does not exist: $tempFilePath';
+        _editedVideoPath = null;
+      });
+      return;
+    }
+
+    final extension = path.extension(tempFilePath);
+
+    // Show save dialog to get filename from user (using original filename as suggestion)
+    final finalPath = await _showSaveDialogAndRename(
+      context,
+      tempFile,
+      originalFilename,
+      extension,
+    );
+
+    if (finalPath != null) {
+      // Success! File has been renamed to user's choice
+      setState(() {
+        _editedVideoPath = finalPath;
+        _errorMessage = null;
+      });
+    } else {
+      // User cancelled - delete temp file
+      try {
+        await tempFile.delete();
+        print('Temp file deleted: $tempFilePath');
+      } catch (e) {
+        print('Error deleting temp file: $e');
+      }
+
+      setState(() {
+        _editedVideoPath = null;
+        _errorMessage = null;
+      });
+    }
+  }
+
+  /// Shows save dialog and handles file renaming/overwrite logic
+  Future<String?> _showSaveDialogAndRename(
+    BuildContext context,
+    File tempFile,
+    String suggestedName,
+    String extension,
+  ) async {
+    final tempDir = tempFile.parent.path;
+
+    while (true) {
+      // Show filename dialog
+      final filename = await showDialog<String>(
+        context: context,
+        builder: (context) => SaveFilenameDialog(
+          suggestedFilename: suggestedName,
+          fileExtension: extension,
+        ),
+      );
+
+      if (filename == null || filename.isEmpty) {
+        // User cancelled
+        return null;
+      }
+
+      // Add extension if missing
+      final filenameWithExt = filename.endsWith(extension) ? filename : '$filename$extension';
+
+      // Check if file exists
+      final targetPath = path.join(tempDir, filenameWithExt);
+      final targetFile = File(targetPath);
+
+      if (await targetFile.exists()) {
+        // File exists - show overwrite dialog
+        if (!mounted) return null;
+
+        final action = await showDialog<OverwriteAction>(
+          context: context,
+          builder: (context) => OverwriteDialog(
+            filename: filenameWithExt,
+          ),
+        );
+
+        if (action == OverwriteAction.cancel) {
+          // User cancelled
+          return null;
+        } else if (action == OverwriteAction.rename) {
+          // User wants to rename - loop back to filename dialog
+          continue;
+        } else if (action == OverwriteAction.overwrite) {
+          // User wants to overwrite - delete existing file
+          try {
+            await targetFile.delete();
+          } catch (e) {
+            if (!mounted) return null;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error deleting existing file: $e')),
+            );
+            return null;
+          }
+        }
+      }
+
+      // Rename temp file to final filename
+      try {
+        await tempFile.rename(targetPath);
+        return targetPath;
+      } catch (e) {
+        if (!mounted) return null;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error renaming file: $e')),
+        );
+        return null;
+      }
     }
   }
 
