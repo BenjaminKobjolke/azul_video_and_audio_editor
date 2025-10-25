@@ -23,10 +23,10 @@ class AudioWaveformVisualizer extends StatefulWidget {
   final Function(double zoomLevel)? onZoomChanged; // Callback when pinch zoom changes zoom level
   final Color backgroundColor;
   final Color waveformColor;
-  final Color selectedRegionColor;
   final Color playbackLineColor;
   final Color touchLineColor;
   final Color markerBorderColor;
+  final Color selectedRegionColor;
 
   const AudioWaveformVisualizer({
     Key? key,
@@ -47,10 +47,10 @@ class AudioWaveformVisualizer extends StatefulWidget {
     this.onZoomChanged,
     this.backgroundColor = const Color(0xFF2C3E50),
     this.waveformColor = Colors.yellowAccent,
-    this.selectedRegionColor = const Color(0x8800FF00),
     this.playbackLineColor = Colors.red,
     this.touchLineColor = Colors.cyan,
     this.markerBorderColor = Colors.blue,
+    this.selectedRegionColor = const Color(0x33FFFFFF),
   }) : super(key: key);
 
   @override
@@ -178,10 +178,10 @@ class _AudioWaveformVisualizerState extends State<AudioWaveformVisualizer> {
             currentPositionMs: widget.currentPositionMs,
             touchedPositionMs: widget.touchedPositionMs,
             waveformColor: widget.waveformColor,
-            selectedRegionColor: widget.selectedRegionColor,
             playbackLineColor: widget.playbackLineColor,
             touchLineColor: widget.touchLineColor,
             markerBorderColor: widget.markerBorderColor,
+            selectedRegionColor: widget.selectedRegionColor,
             zoomLevel: _currentZoom,
             scrollOffsetMs: _scrollOffset,
           ),

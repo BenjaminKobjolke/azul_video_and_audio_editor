@@ -1305,7 +1305,9 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
                       // For now, we don't need to do anything here
                     },
                     onAudioZoomChanged: _onMediaZoomChanged,
+                    waveformColor: widget.options.waveformColor,
                     markerBorderColor: widget.options.markerBorderColor,
+                    selectedRegionColor: widget.options.selectedRegionColor,
                   )
                 : const Center(child: CircularProgressIndicator()),
           ),

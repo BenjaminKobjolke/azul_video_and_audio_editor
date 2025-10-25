@@ -233,7 +233,9 @@ final options = AzulEditorOptions(
   primaryColor: Colors.purple,
   backgroundColor: Colors.black,
   videoBackgroundColor: Colors.grey[900]!,
-  markerBorderColor: Colors.green, // Color of selection marker borders
+  waveformColor: Colors.green, // Color of the audio waveform
+  markerBorderColor: Colors.purple, // Color of selection marker borders
+  selectedRegionColor: Color(0x33FFFFFF), // Color of waveform selected region overlay
   slideAreaColor: Colors.yellow.withOpacity(0.3),
   // Layout customization
   thumbnailSize: 30,
@@ -308,6 +310,7 @@ class AzulEditorStrings {
 
   // Actions menu items
   final String actionsSave;
+  final String actionsSaveFrame;
 
   // Duration display
   final String durationStart;
@@ -332,15 +335,27 @@ class AzulEditorStrings {
   final String statusErrorSavingAudio;
   final String statusErrorSavingMedia;
 
+  // Empty state
+  final String emptyStateTitle;
+  final String emptyStateOpeningPicker;
+  final String emptyStateTapToSelect;
+  final String emptyStateSelectButton;
+
   // Saving overlay
-  final String savingAudio;
-  final String savingVideo;
+  final String exportingMedia;
 
   // Error messages
   final String errorInvalidDuration;
   final String errorNoLogs;
   final String errorOutputEmpty;
   final String errorFFmpegFailed;
+  final String errorAV1NotSupported;
+
+  // Unsaved changes dialog
+  final String discardChangesTitle;
+  final String discardChangesMessage;
+  final String discardChangesCancel;
+  final String discardChangesDiscard;
 }
 ```
 
@@ -372,13 +387,18 @@ final spanishStrings = AzulEditorStrings(
   markerEndAt: 'Fin @ ',
 
   actionsSave: 'Guardar Selección',
+  actionsSaveFrame: 'Guardar Fotograma',
 
   durationStart: 'Inicio:',
   durationLabel: 'Duración:',
   durationEnd: 'Fin:',
 
-  savingAudio: 'Guardando audio...',
-  savingVideo: 'Guardando video...',
+  exportingMedia: 'Exportando medios...',
+
+  discardChangesTitle: '¿Descartar cambios?',
+  discardChangesMessage: 'Tienes cambios sin guardar. ¿Deseas descartarlos?',
+  discardChangesCancel: 'Cancelar',
+  discardChangesDiscard: 'Descartar',
 );
 
 final options = AzulEditorOptions(
@@ -407,9 +427,14 @@ final frenchStrings = AzulEditorStrings(
   playStop: 'Arrêter',
 
   actionsSave: 'Enregistrer Sélection',
+  actionsSaveFrame: 'Enregistrer Image',
 
-  savingAudio: 'Enregistrement audio...',
-  savingVideo: 'Enregistrement vidéo...',
+  exportingMedia: 'Exportation des médias...',
+
+  discardChangesTitle: 'Abandonner les modifications?',
+  discardChangesMessage: 'Vous avez des modifications non enregistrées. Voulez-vous les abandonner?',
+  discardChangesCancel: 'Annuler',
+  discardChangesDiscard: 'Abandonner',
 );
 ```
 
@@ -429,7 +454,9 @@ Customize the editor with `AzulEditorOptions`:
 | `primaryColor` | `Color` | Primary color for UI elements | `Colors.blue` |
 | `backgroundColor` | `Color` | Background color of the editor | `Color(0xFF1E1E1E)` |
 | `videoBackgroundColor` | `Color` | Background behind the media player | `Color(0xFF121212)` |
+| `waveformColor` | `Color` | Color of the audio waveform visualization | `Colors.yellowAccent` |
 | `markerBorderColor` | `Color` | Color of the selection marker borders | `Colors.blue` |
+| `selectedRegionColor` | `Color` | Color of the selected region overlay in waveform | `Color(0x33FFFFFF)` (semi-transparent white) |
 | `saveButtonWidget` | `Widget?` | Custom save button widget | `null` |
 | `saveButtonText` | `String` | Text for the save button | `'Save'` |
 | `saveButtonTextColor` | `Color` | Color of save button text | `Colors.white` |

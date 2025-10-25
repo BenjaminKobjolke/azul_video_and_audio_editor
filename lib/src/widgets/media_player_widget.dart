@@ -22,6 +22,8 @@ class MediaPlayerWidget extends StatelessWidget {
   final Function(double)? onAudioScrollChanged;
   final Function(double)? onAudioZoomChanged;
   final Color markerBorderColor;
+  final Color selectedRegionColor;
+  final Color waveformColor;
 
   const MediaPlayerWidget({
     Key? key,
@@ -40,6 +42,8 @@ class MediaPlayerWidget extends StatelessWidget {
     this.onAudioScrollChanged,
     this.onAudioZoomChanged,
     this.markerBorderColor = Colors.blue,
+    this.selectedRegionColor = const Color(0x33FFFFFF),
+    this.waveformColor = Colors.yellowAccent,
   }) : super(key: key);
 
   @override
@@ -130,7 +134,9 @@ class MediaPlayerWidget extends StatelessWidget {
             onScrollChanged: onAudioScrollChanged,
             onZoomChanged: onAudioZoomChanged,
             backgroundColor: backgroundColor,
+            waveformColor: waveformColor,
             markerBorderColor: markerBorderColor,
+            selectedRegionColor: selectedRegionColor,
           ),
         ),
       ],
@@ -159,7 +165,9 @@ class MediaPlayerWidget extends StatelessWidget {
       onScrollChanged: onAudioScrollChanged,
       onZoomChanged: onAudioZoomChanged,
       backgroundColor: backgroundColor,
+      waveformColor: waveformColor,
       markerBorderColor: markerBorderColor,
+      selectedRegionColor: selectedRegionColor,
     );
   }
 }

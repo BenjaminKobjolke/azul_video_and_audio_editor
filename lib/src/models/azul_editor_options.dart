@@ -36,6 +36,12 @@ class AzulEditorOptions {
   /// Color for the marker borders in the waveform
   final Color markerBorderColor;
 
+  /// Color for the selected region overlay in the waveform
+  final Color selectedRegionColor;
+
+  /// Color for the waveform visualization
+  final Color waveformColor;
+
   /// Custom save button widget
   final Widget? saveButtonWidget;
 
@@ -73,6 +79,8 @@ class AzulEditorOptions {
     this.backgroundColor = const Color(0xFF1E1E1E),
     this.videoBackgroundColor = const Color(0xFF121212),
     this.markerBorderColor = Colors.blue,
+    this.selectedRegionColor = const Color(0x33FFFFFF),
+    this.waveformColor = Colors.yellowAccent,
     this.saveButtonWidget,
     this.saveButtonText = 'Save',
     this.saveButtonTextColor = Colors.white,
