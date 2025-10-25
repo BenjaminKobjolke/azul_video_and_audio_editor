@@ -26,7 +26,9 @@ dependencies:
   #video_thumbnail: ^0.5.3
   flutter_video_thumbnail_plus: ^1.0.5
   path: ^1.9.0
-  flutter_soloud: ^3.3.9
+  flutter_soloud:
+    path: D:/GIT/GitHub/flutter_soloud
+    # Local copy of commit 28435a2bda6c0685b98d1fb5846471bd071ac925
   path_provider: ^2.1.5
   ffmpeg_kit_flutter_new_audio: ^1.1.0
   audio_metadata_reader: ^1.4.2

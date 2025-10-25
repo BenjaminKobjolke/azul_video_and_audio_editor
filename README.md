@@ -102,6 +102,35 @@ Run `pod install` in the `ios/` directory to update dependencies:
 cd ios && pod install
 ```
 
+## Known Issues
+
+### flutter_soloud Dependency
+
+**Issue**: The published `flutter_soloud` package on pub.dev (version 3.3.9) is incomplete and missing required header files (`opus/opus.h`, `vorbis/codec.h`), causing build failures.
+
+**Current Workaround**: This package uses `flutter_soloud` from the GitHub repository instead of pub.dev. The working version is commit `28435a2bda6c0685b98d1fb5846471bd071ac925`.
+
+**Important**: Due to Windows path length limitations during CMake compilation, we cannot pin the exact commit hash using `ref:` in `pubspec.yaml`. The full commit hash in the cache directory path causes build failures for release builds.
+
+**Recommended Configuration**:
+
+Option 1 - Use GitHub without pinning (current approach):
+```yaml
+flutter_soloud:
+  git:
+    url: https://github.com/alnitak/flutter_soloud.git
+    # Using commit 28435a2 (cannot pin due to Windows path length issues)
+```
+
+Option 2 - Use local path (for Windows users experiencing path issues):
+```yaml
+flutter_soloud:
+  path: path/to/local/flutter_soloud
+  # Local copy of commit 28435a2bda6c0685b98d1fb5846471bd071ac925
+```
+
+If you encounter build errors mentioning missing header files or path length issues, use Option 2 with a local clone of the flutter_soloud repository.
+
 ## Usage
 
 ### Basic Usage
