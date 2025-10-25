@@ -72,7 +72,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
   File? mediaFile;
   MediaType? mediaType;
   bool isPlaying = false;
-  String _status = 'No media selected';
+  late String _status;
   bool _isSaving = false;
 
   MediaController? mediaController;
@@ -108,6 +108,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
   @override
   void initState() {
     super.initState();
+    _status = widget.options.strings.statusNoMediaSelected;
     endMs = widget.options.maxDurationMs.toDouble();
 
     // Use the initial video file if provided
@@ -154,10 +155,10 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
         mediaFile = selectedFile;
         mediaType = detectedMediaType;
         _status = detectedMediaType == MediaType.video
-            ? 'Video selected'
+            ? widget.options.strings.statusVideoSelected
             : detectedMediaType == MediaType.audio
-                ? 'Audio selected'
-                : 'Media selected';
+                ? widget.options.strings.statusAudioSelected
+                : widget.options.strings.statusMediaSelected;
         isPlaying = false;
         thumbnailsData = null;
         isInitialized = false;
@@ -197,7 +198,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
         visualGenerator = AudioWaveformGenerator();
       } else {
         setState(() {
-          _status = 'Unsupported media type';
+          _status = widget.options.strings.statusUnsupportedMedia;
         });
         return;
       }
@@ -223,7 +224,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
       await _generateVisualData();
     } catch (e) {
       setState(() {
-        _status = 'Error initializing media: $e';
+        _status = '${widget.options.strings.statusErrorInitializing} $e';
       });
     }
   }
@@ -507,8 +508,8 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
 
     setState(() {
       _status = mediaType == MediaType.video
-          ? 'Generating thumbnails...'
-          : 'Generating waveforms...';
+          ? widget.options.strings.statusGeneratingThumbnails
+          : widget.options.strings.statusGeneratingWaveforms;
       generatingThumbnails = true;
     });
 
@@ -531,14 +532,14 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
           thumbnailsData = visualData;
           _thumbnailTotalWidth = visualData.length * visualGenerator!.segmentWidth;
           generatingThumbnails = false;
-          _status = 'Ready to edit';
+          _status = widget.options.strings.statusReadyToEdit;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           generatingThumbnails = false;
-          _status = 'Error generating visual data: $e';
+          _status = '${widget.options.strings.statusErrorGenerating} $e';
         });
       }
     }
@@ -627,6 +628,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
           originalFilename: originalFilename,
           suggestedFilename: suggestedFilename,
           fileExists: fileExists,
+          strings: widget.options.strings,
         ),
       );
 
@@ -656,7 +658,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
     // Handle audio export with FFmpeg
     if (mediaType == MediaType.audio) {
       setState(() {
-        _status = 'Processing audio...';
+        _status = widget.options.strings.statusProcessingAudio;
       });
 
       try {
@@ -675,7 +677,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
         print('[Audio Export] Start marker: ${startMs}ms, End marker: ${endMs}ms');
 
         if (double.parse(duration) <= 0) {
-          throw Exception('Invalid duration: $duration seconds');
+          throw Exception('${widget.options.strings.errorInvalidDuration} $duration seconds');
         }
 
         // Detect appropriate codec based on input file extension
@@ -725,7 +727,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
           // Fallback to output
           allLogs = output;
         } else {
-          allLogs = 'No logs available';
+          allLogs = widget.options.strings.errorNoLogs;
         }
 
         print('[Audio Export] Return code: $returnCode');
@@ -755,7 +757,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
 
         if (isSuccess) {
           setState(() {
-            _status = 'Audio saved to: $outputPath (${(fileSize / 1024).toStringAsFixed(1)} KB)';
+            _status = '${widget.options.strings.statusAudioSaved} $outputPath (${(fileSize / 1024).toStringAsFixed(1)} KB)';
           });
 
           // Copy metadata from original file to saved file
@@ -779,7 +781,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
           if (widget.options.showSavedSnackbar) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Audio saved: ${path.basename(outputPath)} (${(fileSize / 1024).toStringAsFixed(1)} KB)'),
+                content: Text('${widget.options.strings.snackbarAudioSaved} ${path.basename(outputPath)} (${(fileSize / 1024).toStringAsFixed(1)} KB)'),
                 backgroundColor: widget.options.primaryColor,
               ),
             );
@@ -792,8 +794,8 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
         } else {
           // Failed - show detailed error
           final errorMsg = fileSize == 0
-              ? 'Output file is empty (0 bytes). Check logs for FFmpeg errors.'
-              : 'FFmpeg failed with return code: $returnCode';
+              ? widget.options.strings.errorOutputEmpty
+              : '${widget.options.strings.errorFFmpegFailed} $returnCode';
 
           setState(() {
             _status = 'Error: $errorMsg';
@@ -827,22 +829,22 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
           'logFilePath': logFile.path,
           'success': isSuccess ? 'true' : 'false',
           'error': isSuccess ? '' : (fileSize == 0
-              ? 'Output file is empty (0 bytes). Check logs for FFmpeg errors.'
-              : 'FFmpeg failed with return code: $returnCode'),
+              ? widget.options.strings.errorOutputEmpty
+              : '${widget.options.strings.errorFFmpegFailed} $returnCode'),
         });
         return;
       } catch (e) {
         if (!mounted) return;
 
         setState(() {
-          _status = 'Error saving audio: $e';
+          _status = '${widget.options.strings.statusErrorSavingAudio} $e';
           _isSaving = false;
         });
 
         if (widget.options.showSavedSnackbar) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to save audio: $e'),
+              content: Text('${widget.options.strings.snackbarFailedAudio} $e'),
               backgroundColor: Colors.redAccent,
             ),
           );
@@ -853,7 +855,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
 
     // Handle video export
     setState(() {
-      _status = 'Processing video...';
+      _status = widget.options.strings.statusProcessingVideo;
     });
 
     try {
@@ -898,7 +900,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
       }
 
       setState(() {
-        _status = 'Video saved to: ${finalPath ?? result ?? ''}';
+        _status = '${widget.options.strings.statusVideoSaved} ${finalPath ?? result ?? ''}';
       });
 
       // Copy metadata from original file to saved file (for MP4 videos)
@@ -925,7 +927,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
       if (widget.options.showSavedSnackbar) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Video saved: ${path.basename(finalPath ?? result ?? '')}'),
+            content: Text('${widget.options.strings.snackbarVideoSaved} ${path.basename(finalPath ?? result ?? '')}'),
             backgroundColor: widget.options.primaryColor,
           ),
         );
@@ -952,14 +954,14 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
       if (!mounted) return;
 
       setState(() {
-        _status = 'Error saving media: $e';
+        _status = '${widget.options.strings.statusErrorSavingMedia} $e';
         _isSaving = false;
       });
 
       if (widget.options.showSavedSnackbar) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to save media: $e'),
+            content: Text('${widget.options.strings.snackbarFailedMedia} $e'),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -1125,15 +1127,15 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
         }
       },
       itemBuilder: (context) => [
-        const PopupMenuItem(value: 'all', child: Text('All')),
-        const PopupMenuItem(value: 'selection', child: Text('Selection')),
-        const PopupMenuItem(value: 'from_here', child: Text('From Here')),
-        const PopupMenuItem(value: 'stop', child: Text('Stop')),
+        PopupMenuItem(value: 'all', child: Text(widget.options.strings.playAll)),
+        PopupMenuItem(value: 'selection', child: Text(widget.options.strings.playSelection)),
+        PopupMenuItem(value: 'from_here', child: Text(widget.options.strings.playFromHere)),
+        PopupMenuItem(value: 'stop', child: Text(widget.options.strings.playStop)),
       ],
       child: ElevatedButton.icon(
         onPressed: null, // PopupMenuButton handles tap
         icon: const Icon(Icons.play_circle_outline, size: 20),
-        label: const Text('play'),
+        label: Text(widget.options.strings.playMenuLabel),
         style: ElevatedButton.styleFrom(
           backgroundColor: widget.options.primaryColor,
           foregroundColor: Colors.white,
@@ -1158,13 +1160,13 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
         }
       },
       itemBuilder: (context) => [
-        const PopupMenuItem(value: 'selection', child: Text('Selection')),
-        const PopupMenuItem(value: 'all', child: Text('All')),
+        PopupMenuItem(value: 'selection', child: Text(widget.options.strings.zoomSelection)),
+        PopupMenuItem(value: 'all', child: Text(widget.options.strings.zoomAll)),
       ],
       child: ElevatedButton.icon(
         onPressed: null, // PopupMenuButton handles tap
         icon: const Icon(Icons.zoom_in, size: 20),
-        label: const Text('zoom'),
+        label: Text(widget.options.strings.zoomMenuLabel),
         style: ElevatedButton.styleFrom(
           backgroundColor: widget.options.primaryColor,
           foregroundColor: Colors.white,
@@ -1195,24 +1197,24 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
         }
       },
       itemBuilder: (context) => [
-        const PopupMenuItem(value: 'start_begin', child: Text('Start → 0:00')),
-        const PopupMenuItem(value: 'end_max', child: Text('End → Max')),
+        PopupMenuItem(value: 'start_begin', child: Text(widget.options.strings.markerStartToBeginning)),
+        PopupMenuItem(value: 'end_max', child: Text(widget.options.strings.markerEndToMax)),
         if (_touchedPositionMs != null) ...[
           const PopupMenuDivider(),
           PopupMenuItem(
             value: 'start_touch',
-            child: Text('Start @ ${(_touchedPositionMs! / 1000).toStringAsFixed(1)}s'),
+            child: Text('${widget.options.strings.markerStartAt}${(_touchedPositionMs! / 1000).toStringAsFixed(1)}s'),
           ),
           PopupMenuItem(
             value: 'end_touch',
-            child: Text('End @ ${(_touchedPositionMs! / 1000).toStringAsFixed(1)}s'),
+            child: Text('${widget.options.strings.markerEndAt}${(_touchedPositionMs! / 1000).toStringAsFixed(1)}s'),
           ),
         ],
       ],
       child: ElevatedButton.icon(
         onPressed: null, // PopupMenuButton handles tap
         icon: const Icon(Icons.location_on, size: 20),
-        label: const Text('marker'),
+        label: Text(widget.options.strings.markerMenuLabel),
         style: ElevatedButton.styleFrom(
           backgroundColor: widget.options.primaryColor,
           foregroundColor: Colors.white,
@@ -1282,8 +1284,8 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
                       const SizedBox(height: 20),
                       Text(
                         mediaType == MediaType.audio
-                            ? 'Saving audio...'
-                            : 'Saving video...',
+                            ? widget.options.strings.savingAudio
+                            : widget.options.strings.savingVideo,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 18,
@@ -1302,9 +1304,9 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
               ? FloatingActionButton.extended(
                 onPressed: _pickMedia,
                 icon: const Icon(Icons.video_library, color: Colors.white),
-                label: const Text(
-                  'Select Media',
-                  style: TextStyle(color: Colors.white),
+                label: Text(
+                  widget.options.strings.emptyStateSelectButton,
+                  style: const TextStyle(color: Colors.white),
                 ),
                 backgroundColor: widget.options.primaryColor,
               )
@@ -1323,9 +1325,9 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
             color: widget.options.primaryColor.withOpacity(0.5),
           ),
           const SizedBox(height: 20),
-          const Text(
-            'No Media Selected',
-            style: TextStyle(
+          Text(
+            widget.options.strings.emptyStateTitle,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 22,
               fontWeight: FontWeight.bold,
@@ -1333,13 +1335,13 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
           ),
           const SizedBox(height: 10),
           widget.autoPickVideo
-              ? const Text(
-                'Opening file picker...',
-                style: TextStyle(color: Colors.white54, fontSize: 16),
+              ? Text(
+                widget.options.strings.emptyStateOpeningPicker,
+                style: const TextStyle(color: Colors.white54, fontSize: 16),
               )
-              : const Text(
-                'Tap "Select Media" to get started',
-                style: TextStyle(color: Colors.white54, fontSize: 16),
+              : Text(
+                widget.options.strings.emptyStateTapToSelect,
+                style: const TextStyle(color: Colors.white54, fontSize: 16),
               ),
         ],
       ),
@@ -1391,15 +1393,15 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Start: ${(startMs / 1000).toStringAsFixed(1)}s',
+                  '${widget.options.strings.durationStart} ${(startMs / 1000).toStringAsFixed(1)}s',
                   style: const TextStyle(color: Colors.white),
                 ),
                 Text(
-                  'Duration: ${((endMs - startMs) / 1000).toStringAsFixed(1)}s',
+                  '${widget.options.strings.durationLabel} ${((endMs - startMs) / 1000).toStringAsFixed(1)}s',
                   style: const TextStyle(color: Colors.white70),
                 ),
                 Text(
-                  'End: ${(endMs / 1000).toStringAsFixed(1)}s',
+                  '${widget.options.strings.durationEnd} ${(endMs / 1000).toStringAsFixed(1)}s',
                   style: const TextStyle(color: Colors.white),
                 ),
               ],

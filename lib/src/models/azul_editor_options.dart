@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'azul_editor_strings.dart';
 
 /// Configuration options for the AzulVideoEditor
 class AzulEditorOptions {
@@ -68,6 +69,9 @@ class AzulEditorOptions {
   /// Whether to allow overwriting existing files
   final bool allowOverwrite;
 
+  /// Localized strings for the editor UI
+  final AzulEditorStrings strings;
+
   const AzulEditorOptions({
     this.maxDurationMs = 15000,
     this.title = 'Video Editor',
@@ -91,5 +95,6 @@ class AzulEditorOptions {
     this.defaultFilenamePrefix = 'edited_',
     this.showSaveDialog = true,
     this.allowOverwrite = true,
+    this.strings = const AzulEditorStrings(),
   });
 }

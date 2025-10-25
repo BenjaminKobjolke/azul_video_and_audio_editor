@@ -2,6 +2,7 @@ library azul_video_editor;
 
 export 'src/azul_video_editor.dart';
 export 'src/models/azul_editor_options.dart';
+export 'src/models/azul_editor_strings.dart';
 export 'src/models/media_controller.dart';
 export 'src/controllers/video_media_controller.dart';
 export 'src/controllers/audio_media_controller.dart';

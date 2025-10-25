@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
+import '../models/azul_editor_strings.dart';
 
 /// Dialog for saving media with overwrite/rename options
 class SaveMediaDialog extends StatefulWidget {
   final String originalFilename;
   final String suggestedFilename;
   final bool fileExists;
+  final AzulEditorStrings strings;
 
   const SaveMediaDialog({
     Key? key,
     required this.originalFilename,
     required this.suggestedFilename,
     required this.fileExists,
+    this.strings = const AzulEditorStrings(),
   }) : super(key: key);
 
   @override
@@ -36,7 +39,7 @@ class _SaveMediaDialogState extends State<SaveMediaDialog> {
   bool _validateFilename(String filename) {
     if (filename.isEmpty) {
       setState(() {
-        _errorMessage = 'Filename cannot be empty';
+        _errorMessage = widget.strings.saveDialogErrorEmpty;
       });
       return false;
     }
@@ -45,7 +48,7 @@ class _SaveMediaDialogState extends State<SaveMediaDialog> {
     final invalidChars = RegExp(r'[<>:"/\\|?*]');
     if (invalidChars.hasMatch(filename)) {
       setState(() {
-        _errorMessage = 'Filename contains invalid characters';
+        _errorMessage = widget.strings.saveDialogErrorInvalidChars;
       });
       return false;
     }
@@ -60,17 +63,17 @@ class _SaveMediaDialogState extends State<SaveMediaDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: const Color(0xFF2C3E50),
-      title: const Text(
-        'Save Media File',
-        style: TextStyle(color: Colors.white),
+      title: Text(
+        widget.strings.saveDialogTitle,
+        style: const TextStyle(color: Colors.white),
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Enter filename:',
-            style: TextStyle(color: Colors.white70),
+          Text(
+            widget.strings.saveDialogEnterFilename,
+            style: const TextStyle(color: Colors.white70),
           ),
           const SizedBox(height: 10),
           TextField(
@@ -83,7 +86,7 @@ class _SaveMediaDialogState extends State<SaveMediaDialog> {
                 borderRadius: BorderRadius.circular(8),
                 borderSide: BorderSide.none,
               ),
-              hintText: 'Enter filename',
+              hintText: widget.strings.saveDialogHint,
               hintStyle: TextStyle(color: Colors.grey.shade500),
               errorText: _errorMessage,
             ),
@@ -103,7 +106,7 @@ class _SaveMediaDialogState extends State<SaveMediaDialog> {
                 const SizedBox(width: 5),
                 Expanded(
                   child: Text(
-                    'A file with this name already exists',
+                    widget.strings.saveDialogFileExists,
                     style: TextStyle(
                       color: Colors.orange.shade400,
                       fontSize: 12,
@@ -120,9 +123,9 @@ class _SaveMediaDialogState extends State<SaveMediaDialog> {
           onPressed: () {
             Navigator.of(context).pop(null);
           },
-          child: const Text(
-            'Cancel',
-            style: TextStyle(color: Colors.white70),
+          child: Text(
+            widget.strings.saveDialogCancel,
+            style: const TextStyle(color: Colors.white70),
           ),
         ),
         if (widget.fileExists)
@@ -138,9 +141,9 @@ class _SaveMediaDialogState extends State<SaveMediaDialog> {
                 });
               }
             },
-            child: const Text(
-              'Overwrite',
-              style: TextStyle(color: Colors.white),
+            child: Text(
+              widget.strings.saveDialogOverwrite,
+              style: const TextStyle(color: Colors.white),
             ),
           ),
         ElevatedButton(
@@ -155,9 +158,9 @@ class _SaveMediaDialogState extends State<SaveMediaDialog> {
               });
             }
           },
-          child: const Text(
-            'Save',
-            style: TextStyle(color: Colors.white),
+          child: Text(
+            widget.strings.saveDialogSave,
+            style: const TextStyle(color: Colors.white),
           ),
         ),
       ],
