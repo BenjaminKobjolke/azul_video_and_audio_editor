@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 /// Enum to represent media types
 enum MediaType {
@@ -32,6 +33,15 @@ abstract class MediaController {
 
   /// Check if media is initialized
   bool get isInitialized;
+
+  /// Check if waveform extraction is complete
+  bool get isWaveformReady;
+
+  /// Check if waveform extraction failed
+  bool get waveformExtractionFailed;
+
+  /// Get the full audio samples for waveform visualization
+  Float32List? get fullAudioSamples;
 
   /// Add a listener for playback position updates
   void addListener(Function() listener);

@@ -12,13 +12,25 @@ class VideoMediaController implements MediaController {
   VideoPlayerController? _controller;
   Float32List? _fullAudioSamples;
   final SoLoud _soloud = SoLoud.instance;
+  bool _isWaveformReady = false;
+  bool _waveformExtractionFailed = false;
+  File? _videoFile;
+  final List<Function()> _listeners = [];
 
   @override
   Future<void> initialize(File file) async {
+    _videoFile = file;
     _controller = VideoPlayerController.file(file);
     await _controller!.initialize();
 
-    // Extract audio waveform from video for visualization
+    // Start waveform extraction asynchronously without blocking
+    _extractWaveformAsync();
+  }
+
+  /// Extract audio waveform asynchronously in the background
+  Future<void> _extractWaveformAsync() async {
+    if (_videoFile == null) return;
+
     try {
       // Initialize SoLoud if not already initialized
       if (!_soloud.isInitialized) {
@@ -28,7 +40,7 @@ class VideoMediaController implements MediaController {
       // Extract audio from video to temp WAV file using FFmpeg
       final tempDir = await getTemporaryDirectory();
       final tempAudioPath = path.join(tempDir.path, 'video_audio_extract.wav');
-      final command = '-y -i "${file.path}" -vn -acodec pcm_s16le -ar 44100 -ac 2 "$tempAudioPath"';
+      final command = '-y -i "${_videoFile!.path}" -vn -acodec pcm_s16le -ar 44100 -ac 2 "$tempAudioPath"';
 
       print('[VideoMediaController] Extracting audio to: $tempAudioPath');
       await FFmpegKit.execute(command);
@@ -48,11 +60,17 @@ class VideoMediaController implements MediaController {
         // Clean up temp file
         await tempAudioFile.delete();
         print('[VideoMediaController] Audio waveform extracted successfully');
+        _isWaveformReady = true;
+        _notifyListeners();
       } else {
         print('[VideoMediaController] Temp audio file not created');
+        _waveformExtractionFailed = true;
+        _notifyListeners();
       }
     } catch (e) {
       print('[VideoMediaController] Error extracting audio waveform: $e');
+      _waveformExtractionFailed = true;
+      _notifyListeners();
       // Continue without waveform - video will still work
     }
   }
@@ -93,13 +111,30 @@ class VideoMediaController implements MediaController {
   }
 
   @override
+  bool get isWaveformReady => _isWaveformReady;
+
+  @override
+  bool get waveformExtractionFailed => _waveformExtractionFailed;
+
+  @override
+  Float32List? get fullAudioSamples => _fullAudioSamples;
+
+  @override
   void addListener(Function() listener) {
+    _listeners.add(listener);
     _controller?.addListener(listener);
   }
 
   @override
   void removeListener(Function() listener) {
+    _listeners.remove(listener);
     _controller?.removeListener(listener);
+  }
+
+  void _notifyListeners() {
+    for (final listener in _listeners) {
+      listener();
+    }
   }
 
   @override
@@ -116,7 +151,4 @@ class VideoMediaController implements MediaController {
 
   /// Get aspect ratio for video display
   double get aspectRatio => _controller?.value.aspectRatio ?? 16 / 9;
-
-  /// Get the full audio samples for waveform visualization
-  Float32List? get fullAudioSamples => _fullAudioSamples;
 }

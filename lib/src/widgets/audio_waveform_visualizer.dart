@@ -7,6 +7,8 @@ import 'painters/scrollbar_painter.dart';
 /// Large waveform visualization widget for audio player (DAW-style)
 class AudioWaveformVisualizer extends StatefulWidget {
   final Float32List? samples;
+  final bool isWaveformReady;
+  final bool waveformExtractionFailed;
   final double startMs;
   final double endMs;
   final double durationMs;
@@ -28,6 +30,8 @@ class AudioWaveformVisualizer extends StatefulWidget {
   const AudioWaveformVisualizer({
     Key? key,
     required this.samples,
+    this.isWaveformReady = true,
+    this.waveformExtractionFailed = false,
     required this.startMs,
     required this.endMs,
     required this.durationMs,
@@ -156,6 +160,40 @@ class _AudioWaveformVisualizerState extends State<AudioWaveformVisualizer> {
     });
   }
 
+  // Build waveform content based on extraction state
+  Widget _buildWaveformContent(Size size) {
+    // If waveform extraction failed, show empty container
+    if (widget.waveformExtractionFailed) {
+      return Container();
+    }
+
+    // If waveform is still loading, show spinner
+    if (!widget.isWaveformReady || widget.samples == null) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    // Waveform is ready, show it
+    return CustomPaint(
+      painter: WaveformPainter(
+        samples: widget.samples!,
+        startMs: widget.startMs,
+        endMs: widget.endMs,
+        durationMs: widget.durationMs,
+        currentPositionMs: widget.currentPositionMs,
+        touchedPositionMs: widget.touchedPositionMs,
+        waveformColor: widget.waveformColor,
+        selectedRegionColor: widget.selectedRegionColor,
+        playbackLineColor: widget.playbackLineColor,
+        touchLineColor: widget.touchLineColor,
+        zoomLevel: _currentZoom,
+        scrollOffsetMs: _scrollOffset,
+      ),
+      size: size,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -214,27 +252,7 @@ class _AudioWaveformVisualizerState extends State<AudioWaveformVisualizer> {
                       }
                     },
 
-                    child: widget.samples != null
-                        ? CustomPaint(
-                            painter: WaveformPainter(
-                              samples: widget.samples!,
-                              startMs: widget.startMs,
-                              endMs: widget.endMs,
-                              durationMs: widget.durationMs,
-                              currentPositionMs: widget.currentPositionMs,
-                              touchedPositionMs: widget.touchedPositionMs,
-                              waveformColor: widget.waveformColor,
-                              selectedRegionColor: widget.selectedRegionColor,
-                              playbackLineColor: widget.playbackLineColor,
-                              touchLineColor: widget.touchLineColor,
-                              zoomLevel: _currentZoom,
-                              scrollOffsetMs: _scrollOffset,
-                            ),
-                            size: size,
-                          )
-                        : const Center(
-                            child: CircularProgressIndicator(),
-                          ),
+                    child: _buildWaveformContent(size),
                   ),
                 );
               },

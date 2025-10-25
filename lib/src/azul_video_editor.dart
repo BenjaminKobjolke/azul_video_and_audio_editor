@@ -156,22 +156,13 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
 
       mediaController!.addListener(_updatePlaybackPosition);
       mediaController!.addListener(_checkMediaEnd);
+      mediaController!.addListener(_onWaveformStateChanged);
 
       setState(() {
         isInitialized = true;
         _currentPlaybackPositionMs = 0;
+        _status = widget.options.strings.statusReadyToEdit;
       });
-
-      // For audio files, generate waveform data
-      // For video files, waveform is extracted during controller initialization
-      if (mediaType == MediaType.audio) {
-        await _generateVisualData();
-      } else {
-        // Video is ready - just update status
-        setState(() {
-          _status = widget.options.strings.statusReadyToEdit;
-        });
-      }
     } catch (e) {
       setState(() {
         _status = '${widget.options.strings.statusErrorInitializing} $e';
@@ -228,6 +219,15 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
           _seekToStartMarker();
         }
       }
+    }
+  }
+
+  void _onWaveformStateChanged() {
+    // Rebuild UI when waveform extraction state changes
+    if (mounted) {
+      setState(() {
+        // Just trigger a rebuild to update the waveform visualizer
+      });
     }
   }
 

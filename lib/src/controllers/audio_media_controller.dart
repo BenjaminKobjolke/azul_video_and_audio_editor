@@ -13,12 +13,17 @@ class AudioMediaController implements MediaController {
   bool _isPlaying = false;
   Duration _duration = Duration.zero;
   Float32List? _fullAudioSamples;
+  bool _isWaveformReady = false;
+  bool _waveformExtractionFailed = false;
+  File? _audioFile;
 
   final List<Function()> _listeners = [];
 
   @override
   Future<void> initialize(File file) async {
     try {
+      _audioFile = file;
+
       // Initialize SoLoud if not already initialized
       if (!_soloud.isInitialized) {
         await _soloud.init();
@@ -31,18 +36,37 @@ class AudioMediaController implements MediaController {
       final length = _soloud.getLength(_source!);
       _duration = length;
 
+      _isInitialized = true;
+      _notifyListeners();
+
+      // Start waveform extraction asynchronously without blocking
+      _extractWaveformAsync();
+    } catch (e) {
+      throw Exception('Failed to initialize audio: $e');
+    }
+  }
+
+  /// Extract audio waveform asynchronously in the background
+  Future<void> _extractWaveformAsync() async {
+    if (_audioFile == null) return;
+
+    try {
       // Load full audio samples for visualization (1024 samples for smooth display)
-      final bytes = await file.readAsBytes();
+      final bytes = await _audioFile!.readAsBytes();
       _fullAudioSamples = await _soloud.readSamplesFromMem(
         bytes,
         1024,
         average: true,
       );
 
-      _isInitialized = true;
+      print('[AudioMediaController] Audio waveform extracted successfully');
+      _isWaveformReady = true;
       _notifyListeners();
     } catch (e) {
-      throw Exception('Failed to initialize audio: $e');
+      print('[AudioMediaController] Error extracting audio waveform: $e');
+      _waveformExtractionFailed = true;
+      _notifyListeners();
+      // Continue without waveform - audio will still work
     }
   }
 
@@ -128,6 +152,15 @@ class AudioMediaController implements MediaController {
   }
 
   @override
+  bool get isWaveformReady => _isWaveformReady;
+
+  @override
+  bool get waveformExtractionFailed => _waveformExtractionFailed;
+
+  @override
+  Float32List? get fullAudioSamples => _fullAudioSamples;
+
+  @override
   void addListener(Function() listener) {
     _listeners.add(listener);
   }
@@ -169,7 +202,4 @@ class AudioMediaController implements MediaController {
 
   /// Get the underlying audio source for audio-specific features
   AudioSource? get audioSource => _source;
-
-  /// Get the full audio samples for large waveform visualization
-  Float32List? get fullAudioSamples => _fullAudioSamples;
 }

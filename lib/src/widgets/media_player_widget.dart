@@ -113,6 +113,8 @@ class MediaPlayerWidget extends StatelessWidget {
           flex: 1,
           child: AudioWaveformVisualizer(
             samples: samples,
+            isWaveformReady: videoController.isWaveformReady,
+            waveformExtractionFailed: videoController.waveformExtractionFailed,
             startMs: startMs,
             endMs: endMs > 0 ? endMs : durationMs,
             durationMs: durationMs,
@@ -139,6 +141,8 @@ class MediaPlayerWidget extends StatelessWidget {
 
     return AudioWaveformVisualizer(
       samples: samples,
+      isWaveformReady: audioController.isWaveformReady,
+      waveformExtractionFailed: audioController.waveformExtractionFailed,
       startMs: startMs,
       endMs: endMs > 0 ? endMs : durationMs,
       durationMs: durationMs,

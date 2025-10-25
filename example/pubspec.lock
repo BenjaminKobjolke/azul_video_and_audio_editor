@@ -200,10 +200,9 @@ packages:
   flutter_soloud:
     dependency: transitive
     description:
-      name: flutter_soloud
-      sha256: bc130dc6ee85864458f1ba3fe515caa106e3974a823cef1a436e20a97ecd43d7
-      url: "https://pub.dev"
-    source: hosted
+      path: "D:/GIT/GitHub/flutter_soloud"
+      relative: false
+    source: path
     version: "3.3.9"
   flutter_test:
     dependency: "direct dev"
