@@ -85,6 +85,12 @@ class AzulEditorStrings {
   final String errorFFmpegFailed;
   final String errorAV1NotSupported;
 
+  // Unsaved changes dialog
+  final String discardChangesTitle;
+  final String discardChangesMessage;
+  final String discardChangesCancel;
+  final String discardChangesDiscard;
+
   const AzulEditorStrings({
     // Default English strings
     this.title = 'Video Editor',
@@ -146,5 +152,10 @@ class AzulEditorStrings {
     this.errorOutputEmpty = 'Output file is empty (0 bytes). Check logs for FFmpeg errors.',
     this.errorFFmpegFailed = 'FFmpeg failed with return code:',
     this.errorAV1NotSupported = 'Frame extraction failed. AV1 videos may not be supported on this device.',
+
+    this.discardChangesTitle = 'Discard changes?',
+    this.discardChangesMessage = 'You have unsaved changes. Do you want to discard them?',
+    this.discardChangesCancel = 'Cancel',
+    this.discardChangesDiscard = 'Discard',
   });
 }

@@ -1176,16 +1176,16 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Discard changes?'),
-        content: const Text('You have unsaved changes. Do you want to discard them?'),
+        title: Text(widget.options.strings.discardChangesTitle),
+        content: Text(widget.options.strings.discardChangesMessage),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false), // Stay
-            child: const Text('Cancel'),
+            child: Text(widget.options.strings.discardChangesCancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true), // Discard
-            child: const Text('Discard'),
+            child: Text(widget.options.strings.discardChangesDiscard),
           ),
         ],
       ),
@@ -1196,27 +1196,19 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: !_isSaving && !_hasUnsavedChanges(), // Block back if saving or has unsaved changes
-      onPopInvokedWithResult: (bool didPop, dynamic result) async {
-        if (didPop) return;
+    return WillPopScope(
+      onWillPop: () async {
+        // Block if saving (user must wait for save to complete)
+        if (_isSaving) return false;
 
-        // If blocked due to save, do nothing (save must complete)
-        if (_isSaving) {
-          return;
-        }
-
-        // If blocked due to unsaved changes, show confirmation dialog
+        // Show confirmation dialog if there are unsaved changes
         if (_hasUnsavedChanges()) {
           final shouldDiscard = await _showDiscardChangesDialog(context);
-          if (shouldDiscard && context.mounted) {
-            // Schedule pop for next frame to avoid Navigator lock
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (context.mounted) Navigator.of(context).pop();
-            });
-          }
-          return;
+          return shouldDiscard; // true = allow pop, false = stay
         }
+
+        // No unsaved changes, allow pop
+        return true;
       },
       child: Scaffold(
         backgroundColor: widget.options.backgroundColor,
@@ -1278,7 +1270,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
         ],
       ),
       ), // Scaffold
-    ); // PopScope
+    ); // WillPopScope
   }
 
   Widget _buildMediaEditorContent() {
