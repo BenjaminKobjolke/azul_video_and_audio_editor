@@ -1210,7 +1210,10 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
         if (_hasUnsavedChanges()) {
           final shouldDiscard = await _showDiscardChangesDialog(context);
           if (shouldDiscard && context.mounted) {
-            Navigator.of(context).pop();
+            // Schedule pop for next frame to avoid Navigator lock
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (context.mounted) Navigator.of(context).pop();
+            });
           }
           return;
         }
@@ -1228,7 +1231,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
                 letterSpacing: 1.2,
               ),
         ),
-        backgroundColor: widget.options.primaryColor,
+        backgroundColor: widget.options.backgroundColor,
         elevation: 0,
         leading:
             widget.options.leadingWidget ??

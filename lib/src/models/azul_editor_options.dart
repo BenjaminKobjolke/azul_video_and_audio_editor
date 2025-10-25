@@ -68,7 +68,7 @@ class AzulEditorOptions {
 
   const AzulEditorOptions({
     this.maxDurationMs = 15000,
-    this.title = 'Video Editor',
+    this.title = 'Media Editor',
     this.primaryColor = Colors.blue,
     this.backgroundColor = const Color(0xFF1E1E1E),
     this.videoBackgroundColor = const Color(0xFF121212),
