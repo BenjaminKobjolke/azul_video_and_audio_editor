@@ -73,6 +73,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
   MediaType? mediaType;
   bool isPlaying = false;
   String _status = 'No media selected';
+  bool _isSaving = false;
 
   MediaController? mediaController;
   VisualDataGenerator? visualGenerator;
@@ -534,6 +535,14 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
   Future<void> _saveMedia() async {
     if (mediaFile == null) return;
 
+    // Pause audio playback before saving
+    if (mediaController?.isPlaying == true) {
+      await mediaController?.pause();
+      setState(() {
+        isPlaying = false;
+      });
+    }
+
     // Get original file info
     final originalFilename = path.basename(mediaFile!.path);
     final filenameWithoutExt = path.basenameWithoutExtension(mediaFile!.path);
@@ -626,6 +635,11 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
         finalFilename = '$finalFilename$extension';
       }
     }
+
+    // Set saving state to disable UI
+    setState(() {
+      _isSaving = true;
+    });
 
     // Handle audio export with FFmpeg
     if (mediaType == MediaType.audio) {
@@ -789,6 +803,11 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
           }
         }
 
+        // Reset saving state before returning
+        setState(() {
+          _isSaving = false;
+        });
+
         // Always return to home screen with log data (success or failure)
         Navigator.of(context).pop<Map<String, String>>({
           'path': isSuccess ? outputPath : '',
@@ -805,6 +824,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
 
         setState(() {
           _status = 'Error saving audio: $e';
+          _isSaving = false;
         });
 
         if (widget.options.showSavedSnackbar) {
@@ -906,6 +926,11 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
         }
       }
 
+      // Reset saving state before returning
+      setState(() {
+        _isSaving = false;
+      });
+
       // Return the path and logs for the static method
       Navigator.of(context).pop<Map<String, String>>({
         'path': finalPath ?? '',
@@ -916,6 +941,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
 
       setState(() {
         _status = 'Error saving media: $e';
+        _isSaving = false;
       });
 
       if (widget.options.showSavedSnackbar) {
@@ -1049,7 +1075,7 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
               ),
             ),
         actions: [
-          if (mediaFile != null && isInitialized)
+          if (mediaFile != null && isInitialized && !_isSaving)
             widget.options.saveButtonWidget ??
                 IconButton(
                   icon: const Icon(Icons.save, color: Colors.white),
@@ -1058,7 +1084,42 @@ class _AzulVideoEditorState extends State<AzulVideoEditor> {
                 ),
         ],
       ),
-      body: mediaFile == null ? _buildEmptyState() : _buildMediaEditorContent(),
+      body: Stack(
+        children: [
+          // Main editor content
+          mediaFile == null ? _buildEmptyState() : _buildMediaEditorContent(),
+
+          // Fullscreen blocking overlay when saving
+          if (_isSaving)
+            IgnorePointer(
+              ignoring: true,
+              child: Container(
+                color: Colors.black87,
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        mediaType == MediaType.audio
+                            ? 'Saving audio...'
+                            : 'Saving video...',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
       floatingActionButton:
           mediaFile == null && !widget.autoPickVideo
               ? FloatingActionButton.extended(
