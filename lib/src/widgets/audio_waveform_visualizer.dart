@@ -26,6 +26,7 @@ class AudioWaveformVisualizer extends StatefulWidget {
   final Color selectedRegionColor;
   final Color playbackLineColor;
   final Color touchLineColor;
+  final Color markerBorderColor;
 
   const AudioWaveformVisualizer({
     Key? key,
@@ -49,6 +50,7 @@ class AudioWaveformVisualizer extends StatefulWidget {
     this.selectedRegionColor = const Color(0x8800FF00),
     this.playbackLineColor = Colors.red,
     this.touchLineColor = Colors.cyan,
+    this.markerBorderColor = Colors.blue,
   }) : super(key: key);
 
   @override
@@ -188,6 +190,7 @@ class _AudioWaveformVisualizerState extends State<AudioWaveformVisualizer> {
             selectedRegionColor: widget.selectedRegionColor,
             playbackLineColor: widget.playbackLineColor,
             touchLineColor: widget.touchLineColor,
+            markerBorderColor: widget.markerBorderColor,
             zoomLevel: _currentZoom,
             scrollOffsetMs: _scrollOffset,
           ),

@@ -21,6 +21,7 @@ class MediaPlayerWidget extends StatelessWidget {
   final double? audioTargetScrollOffsetMs;
   final Function(double)? onAudioScrollChanged;
   final Function(double)? onAudioZoomChanged;
+  final Color markerBorderColor;
 
   const MediaPlayerWidget({
     Key? key,
@@ -38,6 +39,7 @@ class MediaPlayerWidget extends StatelessWidget {
     this.audioTargetScrollOffsetMs,
     this.onAudioScrollChanged,
     this.onAudioZoomChanged,
+    this.markerBorderColor = Colors.blue,
   }) : super(key: key);
 
   @override
@@ -128,6 +130,7 @@ class MediaPlayerWidget extends StatelessWidget {
             onScrollChanged: onAudioScrollChanged,
             onZoomChanged: onAudioZoomChanged,
             backgroundColor: backgroundColor,
+            markerBorderColor: markerBorderColor,
           ),
         ),
       ],
@@ -156,6 +159,7 @@ class MediaPlayerWidget extends StatelessWidget {
       onScrollChanged: onAudioScrollChanged,
       onZoomChanged: onAudioZoomChanged,
       backgroundColor: backgroundColor,
+      markerBorderColor: markerBorderColor,
     );
   }
 }

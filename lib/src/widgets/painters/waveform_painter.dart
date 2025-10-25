@@ -14,6 +14,7 @@ class WaveformPainter extends CustomPainter {
   final Color selectedRegionColor;
   final Color playbackLineColor;
   final Color touchLineColor;
+  final Color markerBorderColor;
   final double zoomLevel;
   final double scrollOffsetMs;
 
@@ -28,6 +29,7 @@ class WaveformPainter extends CustomPainter {
     required this.selectedRegionColor,
     required this.playbackLineColor,
     required this.touchLineColor,
+    required this.markerBorderColor,
     required this.zoomLevel,
     required this.scrollOffsetMs,
   });
@@ -168,7 +170,7 @@ class WaveformPainter extends CustomPainter {
 
         // Draw selected region borders (only if visible in viewport)
         final borderPaint = Paint()
-          ..color = Colors.green
+          ..color = markerBorderColor
           ..strokeWidth = 2.0
           ..style = PaintingStyle.stroke;
 

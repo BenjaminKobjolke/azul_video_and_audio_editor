@@ -229,15 +229,18 @@ Customize the editor's appearance and behavior using `AzulEditorOptions`:
 final options = AzulEditorOptions(
   maxDurationMs: 30000, // 30 seconds max duration
   title: 'My Media Editor',
+  // Color customization (all colors are fully customizable)
   primaryColor: Colors.purple,
   backgroundColor: Colors.black,
   videoBackgroundColor: Colors.grey[900]!,
+  markerBorderColor: Colors.green, // Color of selection marker borders
+  slideAreaColor: Colors.yellow.withOpacity(0.3),
+  // Layout customization
   thumbnailSize: 30,
   aspectRatio: 16 / 9, // Force 16:9 aspect ratio for videos
   showDuration: true,
   videoMargin: 20.0,
   videoRadius: 10.0,
-  slideAreaColor: Colors.yellow,
   saveSubfolder: 'myapp', // Save to Music/myapp or Movies/myapp
 );
 
@@ -420,12 +423,13 @@ Customize the editor with `AzulEditorOptions`:
 | `showDuration` | `bool` | Show duration info (start, duration, end) | `true` |
 | `videoMargin` | `double` | Margin around the media player | `16.0` |
 | `videoRadius` | `double` | Border radius for the media player | `12.0` |
-| `slideAreaColor` | `Color` | Color of the slider area in timeline | `Colors.yellow` |
+| `slideAreaColor` | `Color` | Color of the slider area in timeline | `Color(0x4D2196F3)` (blue with transparency) |
 | `title` | `String` | Title displayed on the editor page | `'Video Editor'` |
 | `titleStyle` | `TextStyle?` | Text style for the title | `null` |
-| `primaryColor` | `Color` | Primary color for UI elements | `Color(0xFF6A11CB)` |
-| `backgroundColor` | `Color` | Background color of the editor | `Color(0xFF2C3E50)` |
-| `videoBackgroundColor` | `Color` | Background behind the media player | `Color(0xFF1E2430)` |
+| `primaryColor` | `Color` | Primary color for UI elements | `Colors.blue` |
+| `backgroundColor` | `Color` | Background color of the editor | `Color(0xFF1E1E1E)` |
+| `videoBackgroundColor` | `Color` | Background behind the media player | `Color(0xFF121212)` |
+| `markerBorderColor` | `Color` | Color of the selection marker borders | `Colors.blue` |
 | `saveButtonWidget` | `Widget?` | Custom save button widget | `null` |
 | `saveButtonText` | `String` | Text for the save button | `'Save'` |
 | `saveButtonTextColor` | `Color` | Color of save button text | `Colors.white` |
